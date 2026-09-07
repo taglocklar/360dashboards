@@ -14,6 +14,50 @@
 //   Shadow             XuiNineGrid        32x320 @ (465,190), PanelShadow.png,
 //                                         Top/BottomOffset 100
 //
+// THE AUTHORED NUMBERS ARE NOT THE DRAWN ONES. Every child ships `Show=false`
+// and the code binds it; the same code also PLACES three of them. Read
+// 0x9248dbe4-0x9248dc88 and the little routine it calls at 0x92488668 (both
+// disassembled from `extracted/9199/basefile.exe`, `.text`) and the whole rig
+// falls out of two `GetBounds` calls - one on the hosted scene, one on
+// PanelScene itself:
+//
+//     inset      = (512 - sceneW) / 2                      0x9248dc24,dc34
+//     scene.Pos  = (inset, 512 - sceneH, 0)                0x9248dc38 -> SetPosition
+//     Panel.Pos  = (-inset, 0, 0)                          0x9248dc6c-dc88
+//     Shadow.Pos = (inset + sceneW - 1, 512 - sceneH, 0)   0x924886b0-e0, 8700
+//     Shadow.Size= (its own 32, sceneH)                    0x924886e4-f4
+//
+// (the 1 and the 0 are the `.rdata` floats at 0x9200269c and 0x920026e0; the
+// 0.5 is 0x92003260.) The scene is CENTRED in the surface and the Panel group
+// is shifted LEFT by the same inset, so the two cancel for everything inside
+// the surface - the hosted scene still lands at rig x = 0, which is why
+// left-aligning it at 0 measured right for four judge rounds. They do NOT
+// cancel for `Shadow`, which is the Panel group's child and not the surface's:
+// it ends up at rig x = sceneW - 1, one pixel inside the panel's own right
+// edge, running the panel's full height and hanging 2 px lower than the panel
+// (the surface's own -2, which the Shadow does not get).
+//
+// M4 omitted the pair and left the Shadow at its authored 465, which is
+// coincidentally the right answer for a 420-wide slot MEASURED FROM THE
+// CENTRED ORIGIN and 46 px too far right measured from ours. The frames say
+// so twice, at two different panel widths:
+//
+//   [FRAME Kpa f0048] front Moby slot, 420 wide, right edge 515.7: the column
+//     mean over rows 420-500 falls to 93.6 at x = 516 and climbs back to the
+//     panel's own 121 by x = 548 - a 32 px shadow flush with the panel's edge.
+//     Ours put that dip at 560-592 and left 516-559 unshaded.
+//   [FRAME Yrt f0396] front Rome panel, 460x495, right edge 554.3: the same
+//     detector over the aura reads 107.7 at x = 555 climbing to the aura's own
+//     175 by x = 587. `sceneW - 1` predicts 555 for a Rome panel and 515 for a
+//     slot; the authored 465 predicts 561 for both.
+//
+// Vertically the same frame settles Height: against a background column the
+// f0396 shadow fades in from y = 127 and is at full strength by y = 175, which
+// is `PanelShadow.png`'s own 72-row alpha ramp measured down from a shadow top
+// of 107 (= the Rome panel's top 105, plus the 2 px it hangs). A shadow left
+// at the authored 320 tall would finish that ramp at 350 and stop at 425; the
+// frame still has it at -30 luma at y = 550.
+//
 // WHAT IS EXACT HERE. The mirror geometry is not approximated at all: the
 // runtime already applies `Scale` as a CSS scale about `Pivot`, so a
 // `Scale=(1,-1,1)` element 512 tall authored at y=1022 has its TOP edge - the
@@ -73,6 +117,20 @@ export const RIG_IDS = {
  */
 export const REFLECTION_ALPHA = 0.38;
 export const REFLECTION_FADE = 0.55;
+
+/**
+ * How far the code insets a hosted scene inside the 512x512 surface, and how
+ * far it shifts the `Panel` group the other way. `(512 - sceneW) / 2`
+ * [CODE 0x9248dc24, 0x9248dc34]: 46 for a 420-wide Moby slot, 26 for a
+ * 460-wide Rome panel.
+ */
+export const RIG_INSET = (sceneW: number): number => (PANEL_SURFACE_SIZE - sceneW) / 2;
+
+/** The `Shadow`'s bound geometry, in the Panel group's own coordinates
+ *  [CODE 0x92488668]. Its width is never written and stays the authored 32. */
+export function rigShadow(size: { w: number; h: number }): { x: number; y: number; h: number } {
+  return { x: RIG_INSET(size.w) + size.w - 1, y: PANEL_SURFACE_SIZE - size.h, h: size.h };
+}
 
 export interface RigParts {
   surface: NodeRecord | null;

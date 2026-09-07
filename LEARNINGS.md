@@ -1516,3 +1516,42 @@ that only a small screen or a finger can find.
   walker threw `Cannot read properties of undefined (reading 'nxe')` from an
   `evaluate` that had nothing to do with the edit. It looks exactly like a
   regression in the section it lands in. Finish the run, then edit.
+
+## NXE 9199: the panel shadow, and what an authored number is worth (2026-09-07)
+
+- **A coincidence between an authored number and the code's answer is the most
+  expensive kind of agreement.** `PanelScene.xur` authors `Shadow` at
+  (465, 190) 32x320, and 512 − 320 − 2 = 190 was read as proof that the rig is
+  authored for a bottom-aligned 420x320 slot. It is — but the code writes both
+  numbers anyway, and 465 is its answer for a slot measured from an origin
+  46 px to the LEFT of the one we placed the panel on. The authored value is
+  right and our use of it was wrong, which is why four judge rounds walked past
+  it: every panel EDGE measured correct.
+- **Two writes that cancel are still two writes.** The builder centres the
+  hosted scene in the 512x512 surface, `(512 − sceneW)/2`, and shifts the
+  `Panel` group by the same amount the other way
+  [CODE 0x9248dbe4-0x9248dc88]. For everything inside the surface that is a
+  no-op, so left-aligning at 0 measures identical — and for `Shadow`, which is
+  the Panel group's child and not the surface's, it is the whole answer.
+  Simplifying a cancelling pair out of a rig deletes exactly the elements that
+  are not in the cancelling part.
+- **When a comment cites an address, check the address.** The old note said the
+  shadow rule lived at `.rdata 0x920b0f48` and "is not recovered". 0x920b0f48
+  is `"PAGELENTHSD"`; the `SHADOW` parameter is at 0x920b1068, its two xrefs
+  are four instructions from the rig-id cluster the same file already cites,
+  and the rule was forty lines of PPC away the whole time.
+- **A shadow is measured as an ALPHA, never as a luma.** `PanelShadow.png` is
+  black at alpha 59/255 over a linear 28-px ramp, so `1 − L/B` against the
+  surface's own luma B recovers the texture — and B differs by 30-40 luma
+  between two captures, two themes and our own still-dark Aura. Normalised, our
+  ramp and the frame's agree to a mean 0.007 of alpha on the home page and
+  0.005 on a Rome panel; in raw luma the same two numbers are 9 and 34 apart
+  and say nothing about the shadow.
+- **Gate the placement on a SECOND size, or a constant will pass.** Every rule
+  of the form "the shadow sits at x" fits the front slot alone. The 460-wide
+  Rome panel is what separates `sceneW − 1` (predicts 555, frame reads 555)
+  from the authored 465 (predicts 561 for every panel in the build).
+- **Put the base window of a normalised gate where the bug would land.** The
+  alpha base is read 41-60 px past the shadow's own 32. A shadow displaced by
+  the centring inset falls inside that window, poisons the base and drives
+  every alpha negative: the gate does not merely fail, it fails by 30x.

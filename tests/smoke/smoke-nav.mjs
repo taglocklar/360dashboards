@@ -72,6 +72,123 @@ const STACKED_BY_THE_CONSOLE = {
   ],
 };
 
+/**
+ * The painted-glyph overlap probe, and the metapane's one-scene invariant.
+ * Runs in the page; §12 (m3i) calls it after every switch, move, push and pop.
+ *
+ * WHY IT IS SHAPED THIS WAY. The bug it exists for - two blades' metapane
+ * descriptions on screen at once - was invisible to the sweep in §11, which
+ * compares CONTROL boxes at one design point on a pushed page. Two metapane
+ * sub-scenes are two different scenes at the same place with text at different
+ * offsets, on a BLADE, after a blade switch, so none of those three matched.
+ * So this one:
+ *
+ *  - measures GLYPHS, not controls. A text control's paint box is the control's
+ *    whole rect and two of those overlap all over the dashboard by design; the
+ *    line boxes of the text inside them do not. `Range.getClientRects()` on the
+ *    text node is one rect per rendered line, which is what the eye sees.
+ *  - multiplies opacity up the whole ancestor chain. `offsetParent` and even
+ *    `checkVisibility` count the tray strip's Tab2 as visible: dashcomm/
+ *    TrayScene.xur is a two-tab scene resting on tab 1, and its tab 2 carries
+ *    the disc-title placeholder "Sample" at the SAME point as "Open Tray" with
+ *    Opacity 0 on the Tab2 group (containers.ts, TraySceneLoader). That pair is
+ *    correct and it is not painted; a detector that cannot see the 0 has to
+ *    allowlist it, and an allowlist would have hidden this bug too.
+ *  - counts the scenes mounted in each `metaPanelScene`. That is the invariant
+ *    the console holds by construction (its scene handle lives on the DashScene
+ *    and XuiSceneDestroy runs before the next XuiSceneCreate), so anything
+ *    above one is our bug however it got there.
+ */
+const STACK_PROBE = () => {
+  /** Effective opacity: 0 if anything up the chain is down or transparent. */
+  const eff = (el) => {
+    let o = 1;
+    for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+      const s = getComputedStyle(n);
+      if (s.display === 'none' || s.visibility === 'hidden') return 0;
+      o *= Number(s.opacity);
+      if (o < 0.02) return 0;
+    }
+    return o;
+  };
+  const boxes = [];
+  for (const el of document.querySelectorAll('[data-xui-paint="text"]')) {
+    if (!(el.textContent ?? '').trim()) continue;
+    if (eff(el) < 0.05) continue;
+    const rects = [];
+    for (const line of el.querySelectorAll('div')) {
+      for (const child of line.childNodes) {
+        if (child.nodeType !== 3 || !child.data.trim()) continue;
+        const r = document.createRange();
+        r.selectNodeContents(child);
+        for (const q of r.getClientRects()) {
+          if (q.width > 1 && q.height > 1) rects.push({ x: q.x, y: q.y, w: q.width, h: q.height });
+        }
+      }
+    }
+    if (!rects.length) continue;
+    boxes.push({
+      t: (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 44),
+      scene: el.closest('[data-xui-scene]')?.dataset.xuiScene ?? null,
+      id: el.parentElement?.closest('[data-xui-id]')?.dataset.xuiId ?? null,
+      rects,
+    });
+  }
+  const hits = [];
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      let frac = 0, area = 0;
+      for (const a of boxes[i].rects) for (const b of boxes[j].rects) {
+        const ix = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+        const iy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+        if (ix <= 0 || iy <= 0) continue;
+        const small = Math.min(a.w * a.h, b.w * b.h);
+        if ((ix * iy) / small > frac) { frac = (ix * iy) / small; area = small; }
+      }
+      if (frac > 0.05) {
+        hits.push({
+          frac: Math.round(frac * 100) / 100, area: Math.round(area),
+          who: `${boxes[i].scene}#${boxes[i].id} "${boxes[i].t}" over ${boxes[j].scene}#${boxes[j].id} "${boxes[j].t}"`,
+        });
+      }
+    }
+  }
+  const metas = [...document.querySelectorAll('[data-xui-id="metaPanelScene"]')].map((m) => {
+    // The paint boxes inside the placeholder, grouped by where they land. Two
+    // in one slot is the SAME fault as two mounted scenes, and it is the half
+    // an eye can miss: on a plain blade arrival both mounts were the same
+    // sub-scene, so the duplicate was byte-identical text drawn twice at one
+    // point - heavier, fringed, but not two readable descriptions.
+    const slots = new Map();
+    for (const e of m.querySelectorAll('[data-xui-paint="text"]')) {
+      if (!(e.textContent ?? '').trim() || eff(e) < 0.05) continue;
+      const r = e.getBoundingClientRect();
+      const k = `${Math.round(r.x)},${Math.round(r.y)}`;
+      slots.set(k, (slots.get(k) ?? 0) + 1);
+    }
+    return {
+      // Direct children only: renderInto appends the mounted scene to the
+      // placeholder itself, and a sub-scene may carry a placeholder of its own.
+      subs: [...m.children].filter((c) => c.dataset && c.dataset.xuiScene).map((c) => c.dataset.xuiScene),
+      // metaScene_1line and its variants. The placeholder wears ONE, and a pop
+      // that re-instantiated the visual without taking the old copy down would
+      // show here rather than in `subs`.
+      visuals: [...m.querySelectorAll('[data-xui-visual]')]
+        .filter((v) => v.dataset.xuiVisual.startsWith('metaScene')).length,
+      dupSlots: [...slots.entries()].filter(([, n]) => n > 1),
+      painted: eff(m) >= 0.05,
+    };
+  });
+  const sh = window.__dash.shell;
+  return { hits: hits.sort((a, b) => b.frac - a.frac), metas, tab: sh.tab, focus: sh.focusId, stack: sh.stack };
+};
+
+/** A hit this big is text a reader sees through text. Measured: the bug's own
+ *  pairs come in at 0.75 and 0.88 of the smaller line box, and a clean walk of
+ *  every blade, row, page and pop produces nothing above 0 at all. */
+const STACK_FRACTION = 0.25;
+const STACK_AREA = 100;
+
 const fails = [];
 const check = (ok, msg) => { if (!ok) fails.push(msg); };
 
@@ -438,6 +555,10 @@ try {
   /* --------- 11. M3h: the token and stacking sweep over EVERY reached page */
 
   await m3h(browser);
+
+  /* --------- 12. M3i: the metapane holds ONE scene, on every path there is */
+
+  await m3i(browser);
 } catch (err) {
   fails.push(`threw: ${err instanceof Error ? err.stack : String(err)}`);
 } finally {
@@ -1560,7 +1681,12 @@ async function m3h(browser) {
       const outer = v.filter((a) => !v.some((b) => b.e !== a.e && b.e.contains(a.e)));
       if (outer.length > 1) stacked.push({ where: k, who: outer.map((x) => x.n).join(' | ') });
     }
-    return { tokens, stacked, top: window.__dash.shell.stack.at(-1) };
+    // Every mounted metapane, so the one-scene invariant §12 gates is also
+    // gated on all 50 pushed pages: a page with its own metaPanelScene mounts
+    // its sub-scene the same way a blade does.
+    const metas = [...document.querySelectorAll('[data-xui-id="metaPanelScene"]')]
+      .map((m) => [...m.children].filter((c) => c.dataset && c.dataset.xuiScene).length);
+    return { tokens, stacked, metas, top: window.__dash.shell.stack.at(-1) };
   });
 
   let swept = 0, stacks = 0, tokensSeen = 0;
@@ -1574,6 +1700,8 @@ async function m3h(browser) {
       check(d.top === id, `${tag}pushed ${id}, top is ${d.top}`);
       tokensSeen += d.tokens.length;
       check(d.tokens.length === 0, `${tag}${id} paints an authoring token: ${JSON.stringify(d.tokens)}`);
+      check(d.metas.every((n) => n <= 1),
+        `${tag}${id}: a metaPanelScene holds more than one scene: ${JSON.stringify(d.metas)}`);
       const allowed = STACKED_BY_THE_CONSOLE[id] ?? [];
       for (const s of d.stacked) {
         stacks++;
@@ -1664,5 +1792,146 @@ async function m3h(browser) {
   const errs2 = await page.evaluate(() => window.__dash.errors);
   check(errs2.length === 0, `${tag}__dash.errors: ${errs2.join(' | ')}`);
   check(errs.length === 0, `${tag}page errors: ${errs.join(' | ')}`);
+  await page.close();
+}
+
+/**
+ * §12. The metapane holds ONE scene, and nothing is painted through anything.
+ *
+ * THE BUG THIS IS HERE FOR. From a normal boot: Games blade, Down onto Create
+ * Gamer Profile (which mounts gamesbla/gamesMetaNewProfile.xur into
+ * `metaPanelScene`), RB to Media, LB back to Games. The Games metapane then had
+ * TWO scenes in it - the profile card left over from before the switch and the
+ * MOTD list the arrival mounted - and the dashboard painted both descriptions
+ * on top of each other. `rebaseLevel` throws the Level away on a blade switch
+ * and builds a new one over the SAME placeholder node, so the destroy that
+ * opens `syncMeta` (the console's 0x921b48f4, which calls XuiSceneDestroy on
+ * the DashScene's own handle before every XuiSceneCreate) had nothing to
+ * destroy. The second route in is the fetch: `loadMetaScene` is async where the
+ * console's XuiSceneCreate is not, so two moves inside one load window both
+ * mounted.
+ *
+ * So the walk here does what the judges' walks did not: it drives every blade,
+ * every row of every blade, a push and a pop on each, a switch AWAY and BACK
+ * after the pop, and a pair of moves inside one load window - and it runs the
+ * probe after every one of those, not just at the end.
+ */
+async function m3i(browser) {
+  const page = await browser.newPage();
+  const errs = [];
+  page.on('pageerror', (e) => errs.push(e.message));
+  await page.setViewport({ width: 1920, height: 1080, deviceScaleFactor: 1 });
+  // The FULL boot path, not ?blade=: the bug lives in what a blade switch does
+  // to a Level, and ?blade= builds level 0 a different way.
+  await page.goto(`${BASE}/?zoom=1.5&mute&manual`, { waitUntil: 'networkidle0', timeout: 90000 });
+  await page.waitForFunction(() => document.body.dataset.ready === 'true', { timeout: 90000 });
+  const tag = '[m3i] ';
+  const ev = (f, ...a) => page.evaluate(f, ...a);
+  const step = (n) => ev((n) => window.__dashApi.stepFrames(n), n);
+  const idle = () => ev(() => window.__dashApi.shell.idle());
+  const settle = async (n = 30) => { await step(n); await idle(); await step(2); };
+
+  let checks = 0, worst = 0;
+  const gate = async (where) => {
+    const d = await ev(STACK_PROBE);
+    checks++;
+    const many = d.metas.filter((m) => m.subs.length > 1);
+    check(many.length === 0,
+      `${tag}${where}: a metaPanelScene holds ${many[0]?.subs.length} scenes at once, `
+      + `and the console's holds one (XuiSceneDestroy before XuiSceneCreate, 0x921b48f4): `
+      + `${JSON.stringify(many)}`);
+    const twice = d.metas.filter((m) => m.dupSlots.length);
+    check(twice.length === 0,
+      `${tag}${where}: a metapane paints two text leaves in one slot - the same description drawn `
+      + `over itself: ${JSON.stringify(twice)}`);
+    const skinned = d.metas.filter((m) => m.visuals > 1);
+    check(skinned.length === 0,
+      `${tag}${where}: a metaPanelScene wears ${skinned[0]?.visuals} copies of metaScene_1line: `
+      + `${JSON.stringify(skinned)}`);
+    // One placeholder is painted at a time: the blade you are on, or the page
+    // on top of it. Two painted placeholders is the same fault one level up.
+    const painted = d.metas.filter((m) => m.painted);
+    check(painted.length <= 1,
+      `${tag}${where}: ${painted.length} metapanes are painted at once: ${JSON.stringify(painted)}`);
+    const hard = d.hits.filter((h) => h.frac >= STACK_FRACTION && h.area >= STACK_AREA);
+    if (d.hits.length) worst = Math.max(worst, d.hits[0].frac);
+    check(hard.length === 0,
+      `${tag}${where}: text painted through text - ${hard.map((h) => `${h.frac} of ${h.area}px: ${h.who}`).join(' | ')}`);
+    return d;
+  };
+
+  await settle(90);
+  await gate('boot rest');
+
+  for (let tab = 1; tab <= 5; tab++) {
+    // Reach the blade the way a pad does, one step at a time.
+    let at = (await ev(() => window.__dash.shell.tab));
+    while (at !== tab) {
+      await ev((d) => (d < 0 ? window.__dashApi.shell.left() : window.__dashApi.shell.right()), tab - at);
+      await settle(30);
+      await gate(`switch toward tab ${tab}`);
+      at = await ev(() => window.__dash.shell.tab);
+    }
+    await gate(`tab ${tab} at rest`);
+
+    // EVERY row of the blade, and on each one the whole reported gesture: A
+    // into whatever it opens, B back out, then one move - "press enter on any
+    // option and then return to any blade that displays a text description of
+    // the option I am hovering over".
+    const seen = [];
+    for (let k = 0; k < 12; k++) {
+      const before = await ev(() => window.__dash.shell.focusId);
+      await gate(`tab ${tab} on ${before}`);
+      await ev(() => window.__dashApi.shell.press());
+      await settle(60);
+      const into = await ev(() => window.__dash.shell.stack.at(-1));
+      await gate(`tab ${tab} ${before} -> A (${into})`);
+      if ((await ev(() => window.__dash.shell.level)) > 0) {
+        await ev(() => window.__dashApi.shell.back());
+        await settle(60);
+        await gate(`tab ${tab} ${before} -> A -> B`);
+      }
+      await ev(() => window.__dashApi.shell.move('Down'));
+      await settle(21);
+      const now = await ev(() => window.__dash.shell.focusId);
+      await gate(`tab ${tab} ${before} -> A -> B -> Down (${now})`);
+      if (now === before) break;
+      seen.push(now);
+    }
+    check(seen.length > 0, `${tag}tab ${tab} has a focus chain to walk, got ${JSON.stringify(seen)}`);
+
+    // And the reported reproduction: away one blade and straight back.
+    const other = tab === 5 ? 4 : tab + 1;
+    await ev((t) => (t > window.__dash.shell.tab ? window.__dashApi.shell.right() : window.__dashApi.shell.left()), other);
+    await settle(30);
+    await gate(`tab ${tab} -> ${other} (away)`);
+    await ev((t) => (t > window.__dash.shell.tab ? window.__dashApi.shell.right() : window.__dashApi.shell.left()), tab);
+    await settle(30);
+    const back = await gate(`tab ${other} -> ${tab} (back)`);
+    check(back.tab === tab, `${tag}the walk should be back on tab ${tab}, got ${back.tab}`);
+    // One more move on the blade we came back to: the arrival mounted a scene
+    // and the move has to be able to destroy it.
+    await ev(() => window.__dashApi.shell.move('Down'));
+    await settle(21);
+    await gate(`tab ${tab} down after the round trip`);
+  }
+
+  // The load window. Two moves inside one fetch, which is the state a pad can
+  // reach at 60 Hz and `await shell.idle()` between presses never can.
+  await ev(() => window.__dashApi.shell.go(3));
+  await settle(60);
+  for (const burst of [2, 3]) {
+    await ev((n) => { for (let i = 0; i < n; i++) window.__dashApi.shell.move('Down'); }, burst);
+    await settle(60);
+    await gate(`${burst} moves inside one metapane load`);
+    await ev((n) => { for (let i = 0; i < n; i++) window.__dashApi.shell.move('Up'); }, burst);
+    await settle(60);
+    await gate(`${burst} moves back inside one metapane load`);
+  }
+
+  const errs2 = await ev(() => window.__dash.errors);
+  check(errs2.length === 0, `${tag}__dash.errors: ${errs2.join(' | ')}`);
+  check(errs.length === 0, `${tag}page errors: ${errs.join(' | ')}`);
+  console.log(`  ${tag}${checks} gates over 5 blades, every row, a push, a pop, a round trip and two load-window bursts; worst glyph overlap ${worst}`);
   await page.close();
 }

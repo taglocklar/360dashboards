@@ -46,7 +46,7 @@ import {
   OFFLINE_STATE, evalCondition, parseChannelFile, parseHomeManifest, resolveResString,
   type Channel, type ConsoleState, type Slot,
 } from './epix';
-import { PANEL_SCENE, PANEL_SURFACE_SIZE, RIG_IDS, mountReflection, rigParts } from './panelRig';
+import { PANEL_SCENE, PANEL_SURFACE_SIZE, RIG_IDS, RIG_INSET, mountReflection, rigParts, rigShadow } from './panelRig';
 import {
   LEGEND_SCENE, bindLegend, hoistLegend, relayoutLegend, settleLegend, playLegendRange, pressLegend,
   type LegendReport,
@@ -1502,11 +1502,21 @@ export class NxeShell {
     if (!hosted) { this.noteOnce(`${scene}: not preloaded`); return rig; }
     const mounted = this.renderInto(parts.surface, hosted);
     const size = this.sizeOf(hosted.root);
-    // Bottom-aligned in the surface (see placePanel). Left-aligned needs no
-    // write: the scene's own x is 0.
+    // CENTRED and bottom-aligned in the surface, and the `Panel` group is then
+    // shifted LEFT by the same inset - the pair is [CODE 0x9248dbe4-0x9248dc88]
+    // and it is `rigShadow`'s whole subject. The two cancel for everything
+    // inside the surface (which is why left-aligning it at 0 matched the frame
+    // for four judge rounds) and do NOT cancel for the `Shadow`, which is the
+    // Panel group's own child and not the surface's.
+    const inset = RIG_INSET(size.w);
     if (mounted) {
-      mounted.el.style.top = `${PANEL_SURFACE_SIZE - size.h}px`;
-      mounted.el.dataset['nxeAlign'] = 'bottom';
+      mounted.overrides.set('Position', { x: inset, y: PANEL_SURFACE_SIZE - size.h, z: 0 });
+      updateNode(mounted, ['Position']);
+      mounted.el.dataset['nxeAlign'] = 'centre-bottom';
+    }
+    if (parts.panel) {
+      parts.panel.overrides.set('Position', { x: -inset, y: 0, z: 0 });
+      updateNode(parts.panel, ['Position']);
     }
 
     if (mounted && slot) this.dressSlot(mounted, scene, slot, channel);
@@ -1533,14 +1543,14 @@ export class NxeShell {
     // surface's DOM, so it has to be taken once the surface is finished.
     if (parts.reflection) mountReflection(parts.surface, parts.reflection);
 
-    // The shadow keeps its AUTHORED geometry, (465,190) 32x320. Nothing is
-    // repositioned: y = 190 is exactly 512 - 320 - 2, the top of a
-    // bottom-aligned 320-tall slot, so the rig is already authored for a Moby
-    // slot. A hosted scene of another size would need the console's own SHADOW
-    // parameter (.rdata 0x920b0f48) and that rule is not recovered - which is
-    // recorded rather than guessed at.
-    if (parts.shadow && size.h !== SLOT_HEIGHT) {
-      parts.shadow.el.dataset['nxeApprox'] = `shadow authored for a ${SLOT_HEIGHT}-tall slot, hosting ${size.h}`;
+    // The shadow is BOUND, not authored: the code sets its Position and its
+    // Height from the hosted scene's own box every time a panel is built
+    // [CODE 0x92488668]. See rigShadow().
+    if (parts.shadow) {
+      const box = rigShadow(size);
+      parts.shadow.overrides.set('Position', { x: box.x, y: box.y, z: 0 });
+      parts.shadow.overrides.set('Height', box.h);
+      updateNode(parts.shadow, ['Position', 'Height']);
     }
     return rig;
   }

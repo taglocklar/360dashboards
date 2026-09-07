@@ -122,10 +122,9 @@ interface Level {
   meta: NodeRecord | null;
   metaIndex: number;
   metaText: string;
-  /** The sub-scene currently loaded into the metapane, so the next focus
-   *  change can destroy it the way CDashScene does (0x9214d778). */
-  metaSub: NodeRecord | null;
-  metaSubId: string | null;
+  // What is LOADED into the metapane is deliberately not a field here: it
+  // belongs to the placeholder (BladeShell.metaSubs), because a blade switch
+  // throws the Level away and builds a new one over the SAME placeholder.
   /** Where focus was when this level pushed a child, restored on the way back. */
   savedFocus: string | null;
   /** A level pushed by __dashApi.openLevel() with no scene behind it: the
@@ -235,6 +234,27 @@ export class BladeShell {
   /** Counts every scene `renderInto` mounts, so each mount's root gets its own
    *  `pathKey` and no two mounted scenes can share a scope id. */
   private mountSerial = 0;
+  /**
+   * The sub-scene mounted in a metapane placeholder, keyed by the PLACEHOLDER
+   * NODE. It used to be a field on `Level`, and that is what put two blades'
+   * metapane text on screen at once: `rebaseLevel` throws the whole Level away
+   * on a blade switch and builds a fresh one over the SAME `metaPanelScene`
+   * node, so the new Level's "previous sub-scene" was null, the destroy that
+   * opens `syncMeta` (0x921b48f4) had nothing to destroy, and the next focus
+   * mounted a SECOND scene into the placeholder on top of the first. The
+   * console cannot get into that state: the scene handle lives on the DashScene
+   * (this+0x30 in CDashScene), which survives every blade switch, and
+   * XuiSceneDestroy runs on it before the next XuiSceneCreate.
+   */
+  private readonly metaSubs = new WeakMap<NodeRecord, { node: NodeRecord; id: string }>();
+  /**
+   * A generation per placeholder. `loadMetaScene` fetches, and a focus move, a
+   * pop or a blade switch during that fetch means the scene it is carrying is
+   * already stale: mounting it would leave two scenes in the placeholder the
+   * same way. The console's XuiSceneCreate is synchronous, so it has no such
+   * window; the counter is what stands in for that.
+   */
+  private readonly metaGen = new WeakMap<NodeRecord, number>();
 
   private constructor(
     readonly assets: AssetIndex,
@@ -729,7 +749,7 @@ export class BladeShell {
     return {
       id, scene, node, rootNode, hostNode, loaded, pack, visuals, focus,
       entries: panelEntries(scene), lists, descriptions, navPaths,
-      meta, metaIndex: -1, metaText: '', metaSub: null, metaSubId: null, savedFocus: null,
+      meta, metaIndex: -1, metaText: '', savedFocus: null,
       disabledLists: [],
     };
   }
@@ -966,11 +986,7 @@ export class BladeShell {
     if (!level.meta) { level.metaIndex = index; this.syncParentLabel(level); return; }
 
     // Destroy the previous sub-scene before anything else, as 0x921b48f4 does.
-    if (level.metaSub) {
-      for (const id of this.nodes.removeSubtree(level.metaSub)) this.engine.remove(id);
-      level.metaSub = null;
-      level.metaSubId = null;
-    }
+    this.clearMetaSub(level.meta);
     if (scenePath) this.track(this.loadMetaScene(level, scenePath));
 
     setOwnerText(level.meta, text);
@@ -1011,15 +1027,43 @@ export class BladeShell {
     }
   }
 
+  /**
+   * XuiSceneDestroy on whatever the placeholder is holding (0x921b48f4 calls it
+   * on this+0x30 before every XuiSceneCreate), and the point at which any load
+   * still in flight for this placeholder becomes stale.
+   *
+   * The sweep is over the placeholder's OWN children, not over one remembered
+   * node: `metaPanelScene` holds exactly one scene, and the invariant is what
+   * makes that true no matter which Level - or which discarded Level - mounted
+   * the others. A mounted scene root is the only node `renderInto` tags with
+   * `data-xui-scene`; the placeholder's authored visual (metaScene_1line) is
+   * not one, so the sweep cannot take it.
+   */
+  private clearMetaSub(meta: NodeRecord): void {
+    this.metaGen.set(meta, (this.metaGen.get(meta) ?? 0) + 1);
+    this.metaSubs.delete(meta);
+    for (const child of [...meta.children]) {
+      if (!child.el.dataset['xuiScene']) continue;
+      for (const id of this.nodes.removeSubtree(child)) this.engine.remove(id);
+    }
+  }
+
   private async loadMetaScene(level: Level, path: string): Promise<void> {
-    if (!level.meta) return;
+    const meta = level.meta;
+    if (!meta) return;
+    const gen = this.metaGen.get(meta) ?? 0;
     const found = this.assets.findByBasename(path) ?? `${level.pack}/${path}`;
     try {
       const sub = await loadScene(this.assets, found);
-      level.metaSub = this.renderInto(level.meta, sub);
-      level.metaSubId = sub.id;
+      // Something moved while the fetch was out - a focus move, a pop, a blade
+      // switch - and the placeholder has already been told to show something
+      // else. Mounting now would stack this scene under the newer one.
+      if ((this.metaGen.get(meta) ?? 0) !== gen) return;
+      const node = this.renderInto(meta, sub);
+      if (!node) return;
+      this.metaSubs.set(meta, { node, id: sub.id });
       bindTimelines(this.nodes, this.engine);
-      if (level.metaSub) this.clearTokens(sub.id, level.metaSub);
+      this.clearTokens(sub.id, node);
     } catch (err) {
       this.ctx.report.errors.push(`metapane scene ${path}: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -1726,7 +1770,7 @@ export class BladeShell {
       backCarrier: this.top ? this.keyCarrier(this.top, PRESS_KEY.B)?.id ?? null : null,
       metaIndex: this.top?.metaIndex ?? -1,
       metaText: this.top?.metaText ?? '',
-      metaScene: this.top?.metaSubId ?? null,
+      metaScene: (this.top?.meta ? this.metaSubs.get(this.top.meta)?.id : null) ?? null,
       unresolvedPresses: [...this.unresolvedPresses],
       codePaths: [...this.codePaths],
       locale: this.locale,

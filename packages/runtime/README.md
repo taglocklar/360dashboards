@@ -718,14 +718,35 @@ and are tagged `string+frame` in the table. `IDS_SELECT`, `IDS_SELECTSLOT` and
 
 The mirror geometry is the file's, not ours. `Reflection` is 528x512 at
 y = 1022 with `Scale = (1,-1,1)`, so its top edge - the mirror line - is at
-1022 - 512 = 510, and the hosted scene is LEFT- and BOTTOM-aligned in the
-512x512 surface so that its foot sits on that line. Two independent things say
-that alignment is right: the reflection then starts exactly at the panel's foot
-(which is what the footage shows), and the rig's `Shadow` is authored at
-y = 190 with height 320, and 512 − 320 − 2 = 190 is precisely where a
-bottom-aligned 320-tall slot starts. The rig's origin therefore goes one full
+1022 - 512 = 510, and the hosted scene is bottom-aligned in the 512x512 surface
+so that its foot sits on that line: the reflection then starts exactly at the
+panel's foot, which is what the footage shows. The rig's origin goes one full
 surface (512) above the strip anchor, and the surface's own −2 is exactly why
 the panel's foot lands at 568 against a `MobyFrontPosition` of 570.
+
+**Horizontally the scene is CENTRED, and that is not cosmetic.** The panel
+builder measures the hosted scene and PanelScene itself and then writes three
+positions [CODE 0x9248dbe4-0x9248dc88 and the routine at 0x92488668]:
+
+```
+inset      = (512 − sceneW) / 2                     46 for a slot, 26 for Rome
+scene.Pos  = (inset, 512 − sceneH, 0)
+Panel.Pos  = (−inset, 0, 0)
+Shadow.Pos = (inset + sceneW − 1, 512 − sceneH, 0)   Shadow.Size = (32, sceneH)
+```
+
+The first two cancel — the scene still lands at rig x = 0, which is why simply
+left-aligning it measured right for four judge rounds — and they do NOT cancel
+for `Shadow`, which is the `Panel` group's child and not the surface's. It ends
+up one pixel inside the panel's own right edge, running the panel's full height
+and hanging 2 px below it. M4 left the Shadow at its authored (465,190) 32x320,
+which is the code's own answer for a 420-wide slot measured from the centred
+origin and 46 px too far right measured from an un-shifted one. The frames say
+so at two panel widths: on [FRAME Kpa f0048] the front slot's shadow starts at
+x = 516 against a right edge of 515.7, and on [FRAME Yrt f0396] the 460-wide
+Rome panel's starts at 555 against a right edge of 553.5 — `sceneW − 1` predicts
+both, the authored 465 predicts 561 for both. `tests/smoke/smoke-nxe.mjs`
+`panelShadow()` gates it as an alpha ramp on both.
 
 `XuiTextureSurface` is a live DOM subtree and the reflection is a second, live
 copy of it with a CSS alpha ramp standing in for `reflection.uxfx`. Both are

@@ -313,6 +313,12 @@ try {
   console.log(`  shader draw surfaces suppressed: ${surfaces}`);
   ok(surfaces === 33, `${surfaces} XuiImages recognised as shader draw surfaces, expected 33`);
   auraFloor(`${OUT}/nxe-home.png`, HOME_FRAME);
+  // The front slot's own shadow, on Kpa f0048 rather than on Yrt f0483: the
+  // band it falls across is the SECOND slot, and Kpa's is flat 120-122 from
+  // x 548 all the way to 624 where Yrt's carries a gamer card's artwork. Rows
+  // 420-500 are below both captions. 515.7 is the frame's own measured right
+  // edge of the 420-wide front slot (HOME_LANDMARKS, "panel0 right").
+  panelShadow('home', `${OUT}/nxe-home.png`, QUEUE_FRAME, 515.7, [420, 500]);
   // The SIZE ramp, measured on the DOM rather than on pixels: a dimmed row's
   // ink falls below any luma threshold before its glyphs get smaller, so a
   // cap-height detector on our own render measures the OPACITY ramp and not
@@ -996,6 +1002,53 @@ function silhouette(ourPath, framePath) {
   console.log(`  avatar silhouette: frame y ${f.top}..${f.bottom} (h ${f.h})   ours y ${o.top}..${o.bottom} (h ${o.h})`);
   ok(Math.abs(o.top - f.top) < 6, `the silhouette's head is ${(o.top - f.top).toFixed(1)} px off`);
   ok(Math.abs(o.h / f.h - 1) < 0.08, `the silhouette is ${((o.h / f.h - 1) * 100).toFixed(1)} % off in height`);
+}
+
+/**
+ * The panel rig's `Shadow`, read back as an ALPHA rather than as a luma.
+ *
+ * `PanelShadow.png` is pure black at alpha 59/255 = 0.231 in its leftmost
+ * column, ramping linearly to 0 by column 28 [file], so a shadow over a flat
+ * surface of luma B reads L = B(1 - a) and `1 - L/B` recovers the texture. That
+ * normalisation is the point: the two captures, the two themes and our own
+ * still-dark Aura all put a DIFFERENT B under the same shadow (121.9 on Kpa's
+ * second slot against our 131.5; 175.3 on Yrt's aura against our 141.1), and a
+ * raw luma difference there measures the background, not the shadow.
+ *
+ * B is the same band 41..60 px past the shadow's own 32, in both images. A
+ * shadow drawn in the WRONG PLACE poisons that window and drives every alpha
+ * negative, which is a loud failure and the right one - it is exactly what the
+ * bug did.
+ *
+ * The first three columns are skipped. They are the panel/panel seam, where our
+ * hard edge and a 1.5x upsample of a 1280x720 signal cannot be compared to a
+ * hundredth of an alpha; everything from the fourth column on is the texture.
+ *
+ * `reach` - the last column still at alpha >= 0.10 - is the placement
+ * statistic, and it is measured from the panel's own right edge, so a shadow
+ * displaced by the rig's centring inset scores -1 against the frame's 15.
+ */
+function panelShadow(label, ourPath, framePath, right, band, tol = 0.02) {
+  if (!existsSync(framePath)) { console.log(`  (no ${framePath}; ${label} shadow not measured)`); return; }
+  const run = (im) => {
+    const k = im.w / 1280;
+    const p = rowProfile(im, 0, im.w, Math.round(band[0] * k), Math.round(band[1] * k));
+    const col = (x) => { let s = 0, n = 0; for (let i = Math.round(x * k); i < Math.round((x + 1) * k); i++) { s += p[i]; n++; } return s / n; };
+    const x0 = Math.round(right) - 1;      // rigShadow(): the shadow's own left column
+    let b = 0, n = 0;
+    for (let x = x0 + 41; x < x0 + 61; x++) { b += col(x); n++; }
+    const base = b / n;
+    const a = []; for (let d = 0; d < 34; d++) a.push(1 - col(x0 + d) / base);
+    let reach = -1; for (let d = 0; d < 34; d++) if (a[d] >= 0.10) reach = d;
+    return { base, a, reach };
+  };
+  const o = run(readPng(ourPath)), f = run(readPng(framePath));
+  let sum = 0, n = 0, worst = 0;
+  for (let d = 3; d <= 31; d++) { const e = Math.abs(o.a[d] - f.a[d]); sum += e; n++; worst = Math.max(worst, e); }
+  const mad = sum / n;
+  console.log(`  ${label} shadow: base frame ${f.base.toFixed(1)} ours ${o.base.toFixed(1)}   reach frame ${f.reach} ours ${o.reach}   mean|da| ${mad.toFixed(4)} worst ${worst.toFixed(4)}`);
+  ok(Math.abs(o.reach - f.reach) <= 2, `${label}: the panel shadow reaches ${o.reach} px past the panel's edge, the frame's ${f.reach} (rigShadow puts it at sceneW - 1; the authored 465 puts it 46 px right of a slot's edge)`);
+  ok(mad <= tol, `${label}: the shadow's alpha ramp is ${mad.toFixed(4)} off the frame's, tolerance ${tol}`);
 }
 
 function listPitch(ourPath, framePath) {
@@ -1763,6 +1816,12 @@ async function completeness() {
   await nav.page.screenshot({ path: `${OUT}/nxe-rome-2of2.png` });
   if (existsSync(ROME_FRAME)) {
     measure('rome 2 of 2', `${OUT}/nxe-rome-2of2.png`, ROME_FRAME, ROME_LANDMARKS, 2.5);
+    // The SECOND panel width, and the one that separates `sceneW - 1` from any
+    // constant: a 460-wide Rome panel's shadow lands 39 px left of a 420-wide
+    // slot's. It falls on the bare aura here, not on another panel, which is
+    // why the ramp reads cleanest of anything in the material. 554.3 is the
+    // frame's own right edge (ROME_LANDMARKS, "rome right").
+    panelShadow('rome', `${OUT}/nxe-rome-2of2.png`, ROME_FRAME, 554.3, [300, 560]);
     const frame = readPng(ROME_FRAME), ours = readPng(`${OUT}/nxe-rome-2of2.png`);
     const fCnt = inkRows(frame, 96, 240, 600, 640, 120), oCnt = inkRows(ours, 96, 240, 600, 640, 120);
     console.log(`    "2 of 2" ink: frame y ${fCnt?.top.toFixed(1)}..${fCnt?.bottom.toFixed(1)}   ours ${oCnt?.top.toFixed(1)}..${oCnt?.bottom.toFixed(1)}`);
