@@ -5,10 +5,19 @@ scene, texture, string, sound and animation curve comes from the original
 dashboard binaries, decoded by the tools in this repo and rendered by a
 TypeScript reimplementation of the XUI runtime.
 
-First target: **Blades, build 6770** (the last Blades dashboard, 2008), then
-NXE 9199. **Metro 17559** (the last Xbox 360 dashboard) is extracted, parsed
-and cross-checked through the same pipeline (XUR v8, XUS v2, XUIZ v3); its
-runtime is next.
+Two dashboards run: **Blades, build 6770** (the last Blades release, 2008)
+and **NXE 9199**, each offline with no profile and no disc, which is the
+state the reference captures are in. **Metro 17559**, the last Xbox 360
+dashboard, is extracted, parsed and cross-checked through the same pipeline
+(XUR v8, XUS v2, XUIZ v3); its runtime is not built yet.
+
+All three are the RETAIL builds. The devkit images in the archive are used
+only to prove the decryption: they carry the same dashboard behind a
+different key, and their decrypted basefiles are compared byte for byte
+against the retail ones.
+
+`PLACEHOLDERS.md` is the honest list of everything on screen that is not the
+original, and `LICENSE` and `NOTICE` say what is whose.
 
 ## Run it
 
@@ -44,9 +53,17 @@ paths and twins.
    `reference/fonts/xtt/`. `tools/xtt2ttf.py` decodes them; without them
    text falls back and PLACEHOLDERS.md says so.
 
-Everything derived from them lives under `extracted/<build>/` and
-`public/assets/<build>/`, both gitignored. `npm run extract` reproduces the
-whole dump and asserts the expected counts (`fixtures/expected-<build>.json`,
+A fourth input is optional and local: `reference/` holds the video captures
+of real consoles that the fidelity measurements are taken against, cut into
+frames. It is not in git (it is other people's video and Microsoft's
+artwork), and the suites that need it say so and skip when it is absent;
+`reference/frames/*-README.md` records which capture each set came from, its
+true frame rate and its calibration.
+
+Everything derived from the archive lives under `extracted/<build>/` (the raw
+dump, not in git) and `public/assets/<build>/` (the served tree, which is in
+git so the site builds from a clone alone; NOTICE says whose that material
+is). `npm run extract` reproduces the whole dump and asserts the expected counts (`fixtures/expected-<build>.json`,
 including the TOC entry count read from the packs themselves), so a partial
 dump cannot pass.
 
@@ -115,7 +132,7 @@ fold behind a page and the unfold in front of it are the same file's own
 `From` / `BackTo` ranges (the `SceneTransitions` group animates four
 variables the executable reads every frame) plus the executable's per-panel
 cascade, both decoded; a channel change is a measured fade
-(`dashboards/nxe/transitions.ts`, `physics.ts`, and the runtime README's M4d
+(`dashboards/nxe/transitions.ts`, `physics.ts`, and the runtime README's
 section). Rigs are mounted by distance every frame, so every slot of a channel
 reaches the front with its scene. NXE scenes are 1280x720 and land 1:1 on the
 output, so the Blades view transform does not apply to them - measured, see
@@ -174,7 +191,7 @@ the overlay present in portrait and absent in landscape and absent on a tall
 desktop window, the taps and swipes asserted through `window.__dash`, and the
 compositor budget at phone pixel ratios.
 
-## Stack (verified 2026-09-02, don't re-litigate)
+## Stack
 
 - Vite 8 + TypeScript 5.6 strict, zero runtime dependencies.
 - Rendering: DOM + CSS 3D transforms, inline SVG for vector figures. No WebGL.
@@ -261,32 +278,6 @@ their data section with every declared count matching. Where XUIHelper's
 hand-written 9199 XML and the 9199 binary disagree, the binary wins
 (LEARNINGS.md, "NXE 9199").
 
-## Deploy
-
-The site is https://xbox360.lol, a Vercel project (`360dashboards`, under
-Tag's team) connected to this GitHub repository. Every push to `main` is a
-production deploy built by Vercel itself: framework preset Vite, build
-command `vite build` (the type check is CI's job, see below), output `dist/`.
-`public/assets/` (the extracted scenes, art, audio, fonts and manifests for
-every build) is committed, so the build needs nothing but the repository;
-NOTICE says whose that material is. `vercel.json` carries the project
-settings and the cache headers: everything under `/assets/` is immutable for a
-year except each build's `manifest.json`, which must revalidate, so a
-re-extract shows up without a cache bust.
-
-GitHub Actions (`.github/workflows/ci.yml`) runs `npm run typecheck` and
-`npm test` on every push and pull request to `main`; it deploys nothing. The
-headless smoke suites need Chrome and the local `extracted/` dumps, so
-`npm run smoke` stays a local gate.
-
-To deploy by hand from a working tree (the same output Vercel would build):
-
-```
-npx vercel@latest link --yes --project 360dashboards   # once; .vercel/ is gitignored
-npx vercel@latest build --prod
-npx vercel@latest deploy --prebuilt --prod
-```
-
 ## Verification
 
 - `node --import tsx tools/xur2json.ts --corpus extracted/6770/xuiz --strict`
@@ -333,7 +324,7 @@ npx vercel@latest deploy --prebuilt --prod
   caption (the old detector was anchored to a caption that is nothing but one
   token, and 19 of the corpus's 211 token controls carry theirs among other
   words - two of them on reachable pages), and no two visible controls
-  painting at one authored design box unless the console draws them that way. Section 9 re-walks Judge E round 3's findings: a pushed page's
+  painting at one authored design box unless the console draws them that way. Section 9 covers the page-level geometry and state: a pushed page's
   header measured in DESIGN pixels on three blades, the page underneath
   measured painted after every pop (against the blank state the suite produces
   on purpose, and against the console's own pop in [FRAME 8498
@@ -341,7 +332,7 @@ npx vercel@latest deploy --prebuilt --prod
   width, the Display page's hidden switch art, the media picker's two "Please
   wait" labels, `btn_Back` playing exactly where the page binds `PressKey`
   0x5841, and the Time Zone list driven by index through all its wraps.
-  Section 10 re-walks Judge E round 4's: exactly one header and one legend set
+  Section 10 covers the shell's own chrome: exactly one header and one legend set
   on every blade that pushes a page (the blade's own scene goes away on the
   push, the way `XuiSceneNavigateForward` hides the scene it came from),
   System Info's `edInfo` carrying `dashCSettingsStrings[545]` instead of the
@@ -349,14 +340,17 @@ npx vercel@latest deploy --prebuilt --prod
   ONE value each (a list windows on the axis its template's scroll ends point
   along), and an origin sweep of all 40 System-blade pages with a gate that no
   page paints prose the console's code replaces.
-- `JUDGE.md` records each phase's independent fidelity review.
-- `PLACEHOLDERS.md` lists the only things that are not the original (things
-  the console pulled from Xbox Live), each with its reason.
+- `PLACEHOLDERS.md` lists the only things on screen that are not the
+  original: what the console pulled from Xbox Live, a profile, a disc or the
+  hardware itself, each with the console's own offline behaviour and why it
+  cannot be reproduced here.
+- `LEARNINGS.md` records what the formats and the executables turned out to
+  say, with the addresses and the measurements behind each finding.
 
-### NXE 9199, M4e: every page the code can reach offline
+### NXE 9199: every page the code can reach offline
 
-The audit in `COVERAGE.md` found the NXE home page moving like the console
-and one slot working. After M4e (`dashboards/nxe/pageFocus.ts`, `strip.ts`,
+The NXE shell reaches every page its executable can reach with no profile,
+no disc and no network (`dashboards/nxe/pageFocus.ts`, `strip.ts`,
 `codeLists9199.ts`, `navigation.ts`):
 
 - A hosted page's rows are its own button controls (any `btn*`, `nav*`,
