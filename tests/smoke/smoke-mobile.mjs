@@ -1,7 +1,7 @@
 // The phone and tablet gate.
 //
 // Everything else in this repo is measured against a console. This suite is
-// measured against a DEVICE: the launcher and both dashboards are opened at
+// measured against a DEVICE: the living room and both dashboards are opened at
 // four real screen sizes with touch emulation on, and asked four questions.
 //
 //   1. Does it fit? No horizontal scroll, and the 16:9 stage inside the visual
@@ -41,9 +41,9 @@ const LANDSCAPE = [
 ];
 const PORTRAIT = { name: 'iPhone 15 Pro portrait', width: 393, height: 852, dpr: 3 };
 
-/** The three routes: our page, and the two dashboards. */
+/** The three routes: the room, and the two dashboards flat. */
 const ROUTES = [
-  { id: 'launcher', url: '/?launcher&boot=none&mute' },
+  { id: 'room', url: '/?room&power=on&mute' },
   { id: 'blades', url: '/?build=6770&blade=5&mute' },
   { id: 'nxe', url: '/?build=9199&mute' },
 ];
@@ -136,7 +136,7 @@ try {
 
       // The screenshots the report shows.
       if (d === LANDSCAPE[0]) await p.shot(`${OUT}/mobile-${route.id}.png`);
-      if (portrait && route.id === 'launcher') await p.shot(`${OUT}/mobile-portrait.png`);
+      if (portrait && route.id === 'room') await p.shot(`${OUT}/mobile-portrait.png`);
       await p.close();
     }
   }
@@ -158,27 +158,33 @@ try {
 
   const D = LANDSCAPE[0];
 
-  // The launcher. One tap focuses a card and does NOT start it, which is also
-  // the double-fire check: if the browser's synthesized click had reached the
-  // card's own handler the phase would be 'going' after a single tap.
+  // The room. A finger on the console presses power, exactly as a click does,
+  // and the tap is aimed at where the ring of light PROJECTS to on this
+  // device - not at a hard-coded corner, which would pass on a laptop and miss
+  // the console entirely on a 667 px phone.
   {
-    const p = await open(browser, '/?launcher&boot=none&mute&manual', D);
-    const cards = await p.page.evaluate(() => [...document.querySelectorAll('.launcher-card')].map((e) => {
-      const r = e.getBoundingClientRect();
-      return { id: e.id, x: r.left + r.width / 2, y: r.top + r.height / 2 };
-    }));
-    check(cards.length === 2, `launcher: ${cards.length} cards`);
-    const start = await p.page.evaluate(() => window.__launcher.state().index);
-    check(start === 0, `launcher: starts on index ${start}`);
-    await p.tap(cards[1].x, cards[1].y);
-    const one = await p.page.evaluate(() => ({ s: window.__launcher.state(), touch: window.__dash.touch.slice(-1)[0] }));
-    check(one.s.index === 1, `launcher: one tap left the index at ${one.s.index}`);
-    check(one.s.phase === 'ready', `launcher: one tap put the page in "${one.s.phase}" - the tap double-fired as a click`);
-    check(one.touch && one.touch.gesture === 'tap-focus', `launcher: first tap logged ${JSON.stringify(one.touch)}`);
-    await p.tap(cards[1].x, cards[1].y);
-    const two = await p.page.evaluate(() => ({ s: window.__launcher.state(), touch: window.__dash.touch.slice(-1)[0] }));
-    check(two.s.phase === 'going' && two.s.going === '9199', `launcher: second tap gave phase ${two.s.phase} / going ${two.s.going}`);
-    check(two.touch && two.touch.gesture === 'tap-press', `launcher: second tap logged ${JSON.stringify(two.touch)}`);
+    const p = await open(browser, '/?room&mute&manual', D);
+    const before = await p.page.evaluate(() => window.__room());
+    check(before.powered === false, 'room: the set was on before anything touched it');
+    check(before.glass === 'mirror', `room: the glass is "${before.glass}" on a cold set`);
+    check(before.ring === 0, `room: ${before.ring} quadrants of the ring were lit on a cold set`);
+    // The console is a fetched model; tapping where the stand-in box was is not
+    // the same test.
+    await p.page.waitForFunction(() => window.__room().console === 'model', { timeout: 20000 })
+      .catch(() => check(false, 'room: the authored console never loaded, so the tap target is the stand-in box'));
+    const pt = await p.page.evaluate(() => window.__roomApi.powerPoint());
+    check(pt.x > 0 && pt.x < D.width && pt.y > 0 && pt.y < D.height,
+      `room: the power button projects to ${fmt(pt.x)},${fmt(pt.y)}, off a ${D.width}x${D.height} screen`);
+    await p.tap(pt.x, pt.y);
+    const after = await p.page.evaluate(() => {
+      // The clock is manual, so the warm-up is stepped by hand: 30 frames is
+      // half a second, which is past the relay and into the bloom.
+      for (let i = 0; i < 30; i++) window.__roomApi.step(1 / 60);
+      return window.__room();
+    });
+    check(after.powered === true, 'room: a tap on the console did not press power');
+    check(after.ring === 4, `room: ${after.ring} quadrants lit half a second after the press`);
+    check(after.glass === 'hole', `room: the glass is "${after.glass}" with the tube live`);
     await p.close();
   }
 
@@ -350,7 +356,7 @@ try {
     }
   }
 
-  console.log(`  wrote ${OUT}/mobile-launcher.png, mobile-blades.png, mobile-nxe.png, mobile-portrait.png`);
+  console.log(`  wrote ${OUT}/mobile-room.png, mobile-blades.png, mobile-nxe.png, mobile-portrait.png`);
 } catch (err) {
   fails.push(`threw: ${err instanceof Error ? err.stack : String(err)}`);
 } finally {

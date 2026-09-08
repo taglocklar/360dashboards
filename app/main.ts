@@ -1,9 +1,12 @@
 // Routes:
-//   /                       the launcher: pick Blades or NXE (app/launcher.ts).
-//                           Our own 1280x720 page, not a dashboard; ?launcher
-//                           opens it explicitly with &manual (step its own
-//                           60 Hz clock by hand), &mute and &boot=none (arrive
-//                           settled instead of playing the intro)
+//   /                       the LIVING ROOM (app/room/): a 2008 front room, a
+//                           34" widescreen CRT, and an Xbox 360 on the shelf
+//                           under it. Press the console's power button and the
+//                           ring of light sweeps, the tube warms up and the
+//                           dashboard boots on it. The wheel in the top-left
+//                           corner chooses which dashboard is plugged in.
+//   ?room=off               the bare 16:9 stage instead, same as ?build=
+//   &power=on               arrive with a hot tube and no sequence to play
 //   /?build=6770            the Blades shell: dashmain plus every blade's
 //                           panel scene, resting on the current blade
 //   /?scene=<pack>/<path>   one scene
@@ -50,6 +53,7 @@ import {
   attachTouch, tapFocus, xuiHitsAt, elementsAt, isA, type TapResult,
   DEFAULT_LOCALE, isNativeLocale,
   BLEND_OVERRIDES, GRADIENT_TRANSFORM, FONT_FAMILY, parseBuild, setActiveBuild, activeBuild,
+  type BuildId,
   type RenderCtx, type SceneReport, type DashTelemetry,
 } from '@runtime/index';
 import { NxeShell, type NxeReport } from '@dash/nxe/NxeShell';
@@ -57,7 +61,8 @@ import { BladeShell, OFFLINE, type ShellReport } from '@dash/blades/BladeShell';
 import { DEFAULT_TAB } from '@dash/blades/tabs';
 import { populateLists } from '@dash/blades/lists';
 import { DEFAULT_BOOT } from '@dash/blades/boot';
-import { launcher } from './launcher';
+import { buildRoom, type Room } from './room/Room';
+import { buildWheel } from './room/wheel';
 import { watchOrientation } from './orientation';
 import type { NavDirection } from '@dash/blades/focus';
 
@@ -131,6 +136,30 @@ declare global { interface Window { __dashApi?: DashApi } }
 const params = new URLSearchParams(location.search);
 const host = document.getElementById('app')!;
 
+/**
+ * Where a dashboard's `.xui-viewport` is appended.
+ *
+ * `#app` on every flat route, and the television's glass on `?room` - a
+ * 1280x720 element inside a CSS3DObject (app/room/screen.ts). The three mount
+ * functions below append to THIS and never to `host`, which is the whole of
+ * what putting the dashboard in a living room costs the dashboard: the shells,
+ * the Viewport, the focus chains, the cues and the touch gestures are the same
+ * code either way, and none of them learns where they are.
+ */
+let mountHost: HTMLElement = host;
+
+/**
+ * True on `?room`: the console's boot animation is HELD until the tube is warm.
+ *
+ * A dashboard mounted in a living room must not have booted already by the time
+ * the viewer presses the power button - which is exactly what happens if the
+ * shell boots on mount, because a black tube hides it and you arrive at a home
+ * screen that has, as far as anyone watching can tell, never booted. So the
+ * room route parks the shell on its rest state and the ROOM calls boot(), from
+ * app/room/crt.ts's WARMUP.boot.
+ */
+let deferBoot = false;
+
 /* ------------------------------------------------------------- the mount */
 
 /**
@@ -150,15 +179,40 @@ const host = document.getElementById('app')!;
  * afternoon of editing is not a leak anyone will find, so it has a test.
  */
 const disposers: (() => void)[] = [];
-function onDispose(fn: () => void): void { disposers.push(fn); }
 
-export function teardown(): void {
-  // Last in, first out: the clock stops before the shell it drives goes away.
-  while (disposers.length) {
-    const fn = disposers.pop()!;
+/**
+ * The DASHBOARD's own disposers, which outlive nothing.
+ *
+ * A page can hold one room and, over its life, several dashboards: the wheel
+ * swaps Blades for NXE on the same television without rebuilding the living
+ * room around it. So there are two scopes. The room, the rotate watch and the
+ * page furniture go in `disposers` and are torn down once; a dashboard's
+ * viewport, input router, audio bank and clock go in `dashDisposers` and are
+ * torn down every time the input changes.
+ *
+ * The mount functions do not know which they are in: `onDispose` pushes onto
+ * whichever scope is OPEN, and mountDashboard() opens the dashboard scope
+ * around its dispatch. That is what keeps blades(), nxe(), single() and
+ * gallery() identical on both routes.
+ */
+const dashDisposers: (() => void)[] = [];
+let sink = disposers;
+function onDispose(fn: () => void): void { sink.push(fn); }
+
+/** Last in, first out: the clock stops before the shell it drives goes away. */
+function runDisposers(list: (() => void)[]): void {
+  while (list.length) {
+    const fn = list.pop()!;
     try { fn(); } catch (err) { console.error(err); }
   }
+}
+
+export function teardown(): void {
+  runDisposers(dashDisposers);
+  runDisposers(disposers);
+  sink = disposers;
   host.replaceChildren();
+  mountHost = host;
   delete (window as { __dashApi?: DashApi }).__dashApi;
   delete document.body.dataset['ready'];
 }
@@ -191,25 +245,13 @@ if (import.meta.hot) {
 }
 
 async function main(): Promise<void> {
-  // The rotate-to-landscape ask, on EVERY route: the launcher, both dashboards,
+  // The rotate-to-landscape ask, on EVERY route: the room, both dashboards,
   // the single-scene view and the gallery. It builds nothing at all unless a
   // HANDHELD is being held upright, so a desktop window of any shape never sees
   // it (app/orientation.ts).
   const rotate = watchOrientation(document.body);
   onDispose(rotate.dispose);
 
-  // A bare `/` is the launcher: pick Blades or NXE. Every dashboard route
-  // carries at least ?build= (or a scene/gallery switch), so nothing that the
-  // suites or the judges open goes through here.
-  // `?launcher` opens it explicitly so a suite can add &manual, &mute or
-  // &boot=none to it; the dashboards' own routes never come through here.
-  if (!location.search || params.has('launcher')) {
-    await launcher(host, onDispose, params);
-    // The route built window.__dash; publish what the watch already decided.
-    rotate.refresh();
-    document.body.dataset['ready'] = 'true';
-    return;
-  }
   // ?blend=5:screen - sweep a candidate BlendMode mapping against the frames.
   for (const spec of params.getAll('blend')) {
     const [n, css] = spec.split(':');
@@ -222,28 +264,173 @@ async function main(): Promise<void> {
     if (!k || v === undefined || !(k in GRADIENT_TRANSFORM)) continue;
     (GRADIENT_TRANSFORM as unknown as Record<string, unknown>)[k] = k === 'rotation' ? Number(v) : v;
   }
-  const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : import.meta.env.BASE_URL + '/';
   // The build is chosen BEFORE anything loads: it picks the manifest, the class
   // registry every .xur is parsed with, and the canvas -> framebuffer view.
   const { build, error } = parseBuild(params.get('build'));
-  setActiveBuild(build);
-  const assets = await AssetIndex.load(base, build);
-  const telemetry = createTelemetry(assets.build);
-  mounts += 1;
-  onDispose(startFpsMeter(telemetry));
-  await loadFont(assets.base + `assets/${build}/fonts/`, telemetry.placeholders);
-
-  const skin = await Skin.load(assets, activeBuild().skin);
-  if (params.has('gallery')) await gallery(assets, skin, telemetry);
-  else if (params.has('scene')) await single(assets, skin, telemetry, params.get('scene')!);
-  else if (build === '9199') await nxe(assets, skin, telemetry);
-  else await blades(assets, skin, telemetry);
+  // ?room mounts the dashboard on a television in a 2008 living room instead of
+  // on the page (app/room/). The dashboard is not told: the only thing this
+  // route changes is which element its viewport is appended to, and the gallery
+  // and single-scene views - which are contact sheets, not a console - stay
+  // flat. `?room=off` is the escape hatch back to the bare 16:9 stage.
+  let room: Room | null = null;
+  const wantsRoom = wantsTheRoom();
+  if (wantsRoom) {
+    deferBoot = params.get('blade') === null && params.get('boot') !== 'none';
+    const r = buildRoom(host, {
+      manual: params.has('manual'),
+      base: import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : import.meta.env.BASE_URL + '/',
+      // The console's startup animation - the sphere, the X, the wordmark -
+      // plays on the tube before the dashboard's own boot range. `&startup=off`
+      // skips it, and so does `&manual`, where a <video> element's clock is not
+      // steppable and would make every gate a race.
+      startup: params.get('startup') !== 'off',
+      muted: params.has('mute'),
+      // The dashboard takes the tube when the CONSOLE is done with it: after
+      // the startup animation and its measured 50 ms of black. That is the
+      // whole sequence - press power, the ring of light sweeps, the tube
+      // blooms open onto an animation that is already running, the wordmark
+      // settles, black, and then the dashboard's own boot range.
+      onPictureLive: () => {
+        if (deferBoot) window.__dashApi?.shell?.boot(params.get('boot') || undefined);
+        // The pad belongs to the dashboard again now that there is a dashboard
+        // to look at.
+        window.__dashApi?.input.pop('room-power');
+      },
+    });
+    room = r;
+    mountHost = r.screenHost;
+    onDispose(() => r.dispose());
+    // The wheel replaces the launcher: the choice of dashboard is a control in
+    // the room, not a page in front of it. It swaps the build in place, so the
+    // living room it is standing in never rebuilds.
+    const wheel = buildWheel(r, build, async (next) => {
+      deferBoot = true;
+      await mountDashboard(next);
+    });
+    onDispose(wheel.dispose);
+  }
+  const telemetry = await mountDashboard(build);
+  if (room) startRoom(room);
   // AFTER the route: publish() replaces the telemetry's errors with the
   // scene report's, so a message pushed before it would vanish.
   if (error) telemetry.errors.push(error);
-  syncHmr(telemetry);
   rotate.refresh();
   document.body.dataset['ready'] = 'true';
+}
+
+/**
+ * Build one dashboard into `mountHost`, replacing whatever was there.
+ *
+ * Everything a build owns is chosen here and nowhere else: the manifest, the
+ * class registry every .xur is parsed with, the skin, the string tables, the
+ * audio bank and the canvas -> framebuffer view. Calling it a second time with
+ * a different build is what the wheel does, and the ONLY thing it leaves alone
+ * is the room - which is why the television does not blink out and come back
+ * when you change what is plugged into it.
+ */
+async function mountDashboard(build: BuildId): Promise<DashTelemetry> {
+  runDisposers(dashDisposers);
+  mountHost.replaceChildren();
+  sink = dashDisposers;
+  try {
+    const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : import.meta.env.BASE_URL + '/';
+    setActiveBuild(build);
+    const assets = await AssetIndex.load(base, build);
+    const telemetry = createTelemetry(assets.build);
+    mounts += 1;
+    onDispose(startFpsMeter(telemetry));
+    await loadFont(assets.base + `assets/${build}/fonts/`, telemetry.placeholders);
+    const skin = await Skin.load(assets, activeBuild().skin);
+    if (params.has('gallery')) await gallery(assets, skin, telemetry);
+    else if (params.has('scene')) await single(assets, skin, telemetry, params.get('scene')!);
+    else if (build === '9199') await nxe(assets, skin, telemetry);
+    else await blades(assets, skin, telemetry);
+    // The live-singleton census belongs to the DASHBOARD, so it is taken here
+    // and not once at the end of main(). A wheel swap builds a whole new
+    // telemetry object, and leaving this to main() meant every count on it
+    // read 0 after a swap - which is worse than wrong, because zero viewports
+    // and zero routers is what a torn-down page looks like, so the one number
+    // that would catch a swap leaking a viewport was reporting a clean sheet.
+    syncHmr(telemetry);
+    return telemetry;
+  } finally {
+    sink = disposers;
+  }
+}
+
+/**
+ * Is this route a living room, or a bare 16:9 stage?
+ *
+ * A bare `/` is the ROOM. That is the front door now: it used to be our own
+ * launcher page, a 1280x720 menu you passed through on the way to a dashboard,
+ * and the choice it offered has moved into the wheel in the room's top-left
+ * corner (app/room/wheel.ts). Nobody should meet an Xbox 360 through a web
+ * page.
+ *
+ * Everything the suites and the judges open is FLAT, and it stays flat:
+ *
+ *   /                     the room
+ *   /?room&build=9199     the room, with NXE plugged in (what the wheel writes)
+ *   /?room&mute&manual    the room, silent and hand-stepped (the suite)
+ *   /?build=6770          the bare stage - every screenshot gate, every
+ *                         measurement against a reference frame
+ *   /?boot=none, /?blade=5, /?gallery, /?scene=, /?zoom=  the bare stage too
+ *   /?room=off            the escape hatch, said out loud
+ *
+ * The rule is deliberately blunt: NAMED `room`, or NO PARAMETERS AT ALL.
+ * Anything else is flat.
+ *
+ * The tempting rule - "flat only when a route parameter says so" - is wrong,
+ * and wrong in a way that is invisible until the whole board runs. Every suite
+ * and every judge in this repo opens URLs like `/?blade=5&zoom=1.5&mute&manual`
+ * and `/?boot=none`, with no `build=` at all, because the default build has
+ * always been Blades. Under that rule all of them silently became living
+ * rooms: smoke-nav read "first load must play a boot range, got null" (the
+ * room HOLDS the boot until the tube is warm), smoke-blades measured a 328x2
+ * screenshot against a 1920x1080 reference, and smoke-boot's compositor budget
+ * went over by the WebGL canvas nobody asked it to draw.
+ */
+function wantsTheRoom(): boolean {
+  if (params.has('room')) return params.get('room') !== 'off';
+  return params.size === 0;
+}
+
+/**
+ * The room's opening state.
+ *
+ * The set is dark, the console is asleep, and the only thing that will wake it
+ * is the power button - clicked on the console itself (app/room/Room.ts
+ * raycasts it) or pressed as A on the pad, which is what a viewer with no
+ * mouse and no idea that the console is clickable will try.
+ *
+ * While it is dark the dashboard MUST NOT hear the pad. It is mounted, parked
+ * on DefaultTab, one hole-punch away from being visible - so an Enter that
+ * both powers the console on and presses whatever control the shell is focused
+ * on would open a page nobody asked for, behind a black tube, before the boot
+ * animation has played. One layer on top of the input stack swallows the lot
+ * until the picture is live.
+ *
+ * `&power=on` skips the whole sequence and arrives at a hot tube: what the
+ * screenshot gates and any deep link into a page want.
+ */
+function startRoom(room: Room): void {
+  if (params.get('power') === 'on') {
+    room.snapPowered();
+    if (deferBoot) window.__dashApi?.shell?.boot(params.get('boot') || undefined);
+    return;
+  }
+  const router = window.__dashApi?.input;
+  router?.push({
+    id: 'room-power',
+    onButton: (b) => { if (b === Button.A || b === Button.Start) room.setPower(true); },
+    // A layer with no `consumes` swallows EVERY button, and this one only acts
+    // on two. That made the cold room quietly different from the flat routes:
+    // Tab is Guide, Guide is a documented no-op that records itself in
+    // `__dash.placeholders`, and on `/` it recorded nothing at all until this
+    // layer was popped seven seconds later. Take the two presses this layer is
+    // for and let everything else fall through to the dashboard.
+    consumes: (b) => b === Button.A || b === Button.Start,
+  });
 }
 
 /** The live-singleton census. Every count is 1 on a healthy page, however many
@@ -284,7 +471,7 @@ async function loadFont(fontDir: string, placeholders: string[]): Promise<void> 
 async function blades(assets: AssetIndex, skin: Skin, t: DashTelemetry): Promise<void> {
   const viewportHost = document.createElement('div');
   viewportHost.className = 'xui-viewport';
-  host.appendChild(viewportHost);
+  mountHost.appendChild(viewportHost);
   const zoom = Number(params.get('zoom') ?? '1') || 1;
   const viewport = new Viewport(viewportHost, { consoleView: !params.has('design'), zoom });
 
@@ -321,7 +508,7 @@ async function blades(assets: AssetIndex, skin: Skin, t: DashTelemetry): Promise
   if (blade !== null) {
     const startTab = Number(blade);
     shell.seekRest(Number.isFinite(startTab) ? startTab : DEFAULT_TAB);
-  } else if (bootParam === 'none') {
+  } else if (bootParam === 'none' || deferBoot) {
     shell.seekRest(DEFAULT_TAB);
   } else {
     shell.boot(bootParam || DEFAULT_BOOT);
@@ -501,7 +688,7 @@ function syncShell(t: DashTelemetry, shell: BladeShell, audio: AudioBank): void 
 async function single(assets: AssetIndex, skin: Skin, t: DashTelemetry, id: string): Promise<void> {
   const viewportHost = document.createElement('div');
   viewportHost.className = 'xui-viewport';
-  host.appendChild(viewportHost);
+  mountHost.appendChild(viewportHost);
   const zoom = Number(params.get('zoom') ?? '1') || 1;
   const viewport = new Viewport(viewportHost, { consoleView: !params.has('design'), zoom });
 
@@ -627,7 +814,7 @@ function installApi(engine: TimelineEngine, t: DashTelemetry, input: InputRouter
 async function nxe(assets: AssetIndex, skin: Skin, t: DashTelemetry): Promise<void> {
   const viewportHost = document.createElement('div');
   viewportHost.className = 'xui-viewport';
-  host.appendChild(viewportHost);
+  mountHost.appendChild(viewportHost);
   const zoom = Number(params.get('zoom') ?? '1') || 1;
   // consoleView is still the right flag: it just resolves to the IDENTITY view
   // transform on 9199, whose scenes are 1280x720 and land 1:1 (build.ts).

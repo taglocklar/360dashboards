@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1160" viewBox="0 0 800 1160">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1d4763"/>
+      <stop offset="0.18" stop-color="#286078"/>
+      <stop offset="0.40" stop-color="#3b8695"/>
+      <stop offset="0.60" stop-color="#67a8a4"/>
+      <stop offset="0.76" stop-color="#b9b18e"/>
+      <stop offset="0.89" stop-color="#f0c17d"/>
+      <stop offset="1" stop-color="#ffdfa6"/>
+    </linearGradient>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3d8592"/>
+      <stop offset="0.09" stop-color="#2c6678"/>
+      <stop offset="0.42" stop-color="#235368"/>
+      <stop offset="1" stop-color="#1e4459"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffe3ac" stop-opacity="0.92"/>
+      <stop offset="0.28" stop-color="#ffc47c" stop-opacity="0.52"/>
+      <stop offset="0.60" stop-color="#e8945a" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#c8703f" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="col" gradientUnits="userSpaceOnUse" cx="528" cy="668" r="470"
+      gradientTransform="translate(528 668) scale(0.34 1) translate(-528 -668)">
+      <stop offset="0" stop-color="#ffdca4" stop-opacity="0.62"/>
+      <stop offset="0.38" stop-color="#f2ab6c" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#c8703f" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="core" gradientUnits="userSpaceOnUse" cx="528" cy="668" r="240"
+      gradientTransform="translate(528 668) scale(0.26 1) translate(-528 -668)">
+      <stop offset="0" stop-color="#fff0cd" stop-opacity="0.55"/>
+      <stop offset="0.45" stop-color="#ffc888" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#e39657" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="wash" gradientUnits="userSpaceOnUse" cx="528" cy="668" r="410"
+      gradientTransform="translate(528 668) scale(1 0.42) translate(-528 -668)">
+      <stop offset="0" stop-color="#ffd08f" stop-opacity="0.34"/>
+      <stop offset="0.5" stop-color="#e79a5e" stop-opacity="0.11"/>
+      <stop offset="1" stop-color="#c8703f" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="landref" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f2b3a" stop-opacity="0.5"/>
+      <stop offset="0.45" stop-color="#12374a" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#16455a" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="vig" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f2634" stop-opacity="0"/>
+      <stop offset="1" stop-color="#122c3c" stop-opacity="0.38"/>
+    </linearGradient>
+    <clipPath id="skyclip"><rect x="0" y="0" width="800" height="668"/></clipPath>
+    <clipPath id="seaclip"><rect x="0" y="668" width="800" height="492"/></clipPath>
+  </defs>
+
+  <rect x="0" y="0" width="800" height="668" fill="url(#sky)"/>
+  <g clip-path="url(#skyclip)">
+    <ellipse cx="528" cy="656" rx="370" ry="300" fill="url(#glow)"/>
+    <circle cx="528" cy="656" r="88" fill="#fff4d6"/>
+    <path d="M -30 214 C 150 172, 350 190, 510 206 C 620 217, 700 210, 830 222 C 720 262, 520 270, 370 258 C 220 246, 80 250, -30 214 Z" fill="#123f5c" opacity="0.5"/>
+    <path d="M 330 318 C 470 296, 630 302, 830 314 C 700 344, 540 348, 390 338 C 348 335, 330 327, 330 318 Z" fill="#1a4f68" opacity="0.46"/>
+    <path d="M -30 424 C 150 396, 380 404, 560 416 C 660 423, 760 420, 830 428 C 700 460, 420 466, 230 456 C 110 450, 20 442, -30 424 Z" fill="#2b6270" opacity="0.46"/>
+    <path d="M 120 526 C 280 508, 480 512, 660 522 C 720 526, 780 528, 830 532 C 700 556, 440 560, 270 550 C 190 545, 140 538, 120 526 Z" fill="#94826c" opacity="0.4"/>
+    <path d="M -30 592 C 160 576, 420 578, 620 588 C 700 592, 780 594, 830 598 C 690 618, 380 622, 180 614 C 80 610, 10 604, -30 592 Z" fill="#dda76a" opacity="0.48"/>
+    <path d="M 250 634 C 400 627, 570 629, 790 634 C 640 648, 400 650, 300 645 C 268 643, 252 639, 250 634 Z" fill="#f8d69c" opacity="0.5"/>
+    <rect x="0" y="665" width="800" height="4" fill="#ffe6b6" opacity="0.55"/>
+  </g>
+
+  <!-- land: a headland on the left, a low spit far right -->
+  <path d="M -20 672 L -20 560 C 44 520, 104 492, 168 500 C 226 508, 262 546, 300 588 C 336 626, 372 654, 408 672 Z" fill="#12303f"/>
+  <path d="M 690 672 C 716 656, 752 648, 790 652 C 806 654, 818 658, 826 672 Z" fill="#153543"/>
+
+  <rect x="0" y="668" width="800" height="492" fill="url(#sea)"/>
+  <g clip-path="url(#seaclip)">
+    <rect x="0" y="668" width="800" height="492" fill="url(#wash)"/>
+    <rect x="0" y="668" width="800" height="492" fill="url(#col)"/>
+    <path d="M -20 664 L -20 734.96 C 44 759.76, 104 777.12, 168 772.16 C 226 767.2, 262 743.64, 300 717.6 C 336 694.04, 372 676.68, 408 664 Z" fill="url(#landref)"/>
+    <rect x="0" y="668" width="800" height="492" fill="url(#core)"/>
+    <rect x="0" y="708" width="800" height="5" fill="#d6ebee" opacity="0.075"/>
+    <rect x="0" y="766" width="800" height="7" fill="#d6ebee" opacity="0.066"/>
+    <rect x="0" y="841.2" width="800" height="9" fill="#d6ebee" opacity="0.057"/>
+    <rect x="0" y="924.7" width="800" height="11" fill="#d6ebee" opacity="0.048"/>
+    <rect x="0" y="1014" width="800" height="13" fill="#d6ebee" opacity="0.039"/>
+    <rect x="0" y="1108" width="800" height="15" fill="#d6ebee" opacity="0.030"/>
+    <rect x="517.4" y="714.7" width="10.6" height="3" rx="1.5" fill="rgb(255,246,224)" opacity="0.53"/>
+    <rect x="500.4" y="740.5" width="39.8" height="3.7" rx="1.8" fill="rgb(255,241,213)" opacity="0.65"/>
+    <rect x="556.7" y="742.1" width="19.5" height="3.7" rx="1.8" fill="rgb(255,241,213)" opacity="0.45"/>
+    <rect x="483.7" y="798.1" width="54" height="4.3" rx="2.2" fill="rgb(255,236,202)" opacity="0.41"/>
+    <rect x="562" y="798.7" width="35.6" height="4.3" rx="2.2" fill="rgb(255,236,202)" opacity="0.31"/>
+    <rect x="505.7" y="855.5" width="47" height="5" rx="2.5" fill="rgb(255,231,191)" opacity="0.56"/>
+    <rect x="521.6" y="893.5" width="42.3" height="5.7" rx="2.8" fill="rgb(255,226,180)" opacity="0.55"/>
+    <rect x="429.4" y="945.7" width="118.8" height="6.3" rx="3.2" fill="rgb(255,221,169)" opacity="0.33"/>
+    <rect x="490.5" y="1008.3" width="117.4" height="7" rx="3.5" fill="rgb(255,216,158)" opacity="0.45"/>
+    <rect x="404.2" y="1086.9" width="175.7" height="7.7" rx="3.8" fill="rgb(248,207,149)" opacity="0.13"/>
+    <rect x="515.4" y="1087.2" width="95.6" height="7.7" rx="3.8" fill="rgb(248,207,149)" opacity="0.07"/>
+    <rect x="0" y="920" width="800" height="240" fill="url(#vig)"/>
+  </g>
+</svg>

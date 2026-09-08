@@ -29,10 +29,9 @@ const SUITES = [
   // against the reference stills. It also re-checks that the DEFAULT route
   // still serves Blades 6770 on its own 1120x770 canvas.
   ['tests/smoke/smoke-nxe.mjs'],
-  // The launcher: our own page on a bare `/`. Every image traced back to a
-  // manifest entry, both builds offered, Right/Down+Enter to ?build=9199, the
-  // focus and select cues, and the same layer budget as the dashboards.
-  ['tests/smoke/smoke-launcher.mjs'],
+  // The living room on a bare `/`: the hole-punched glass, the power button,
+  // the warm-up, the wheel and the in-place build swap.
+  ['tests/smoke/smoke-room.mjs'],
   // Phones and tablets: the fit at four real device sizes, the rotate-to-
   // landscape ask, the touch gestures on all three routes, and the compositor
   // budget at phone pixel ratios.

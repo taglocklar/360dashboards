@@ -110,206 +110,11 @@ html, body {
   font-size: 12px; white-space: pre-wrap;
 }
 
-/* ------------------------------------------------------------ launcher */
-/* The one page in the project that is OURS. Every other thing inside
-   .xui-canvas is scene data and nothing here may touch it; the launcher is
-   the exception, and it is scoped to `.launcher` so it cannot.
-
-   It is authored at 1280x720, the console's output size, and the Viewport
-   fits that box into the window. The only console materials on it are the
-   two extracted images (app/launcher.ts names their manifest entries), the
-   ConvectionUI face above, and the accent green #8CC43B, which is a palette
-   entry of dashcomm/xboxLogo.png itself. */
-
-.launcher {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  background: #f4f5f2;
-  color: #4a5044;
-  font-family: ConvectionUI, "Segoe UI", system-ui, sans-serif;
-  user-select: none;
-  cursor: default;
-  touch-action: none;
-}
-.launcher img { display: block; }
-
-/* The one ambient element: a wide green bloom that leans toward whichever
-   card has focus, so the whole page acknowledges a move. */
-.launcher-glow {
-  position: absolute;
-  left: 50%;
-  top: 62%;
-  width: 1560px;
-  height: 1040px;
-  margin: -520px 0 0 -780px;
-  background: radial-gradient(closest-side,
-    rgba(140, 196, 59, 0.20), rgba(140, 196, 59, 0.06) 46%, rgba(140, 196, 59, 0) 72%);
-  transform: translateX(-176px);
-  transition: transform 420ms cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-.launcher[data-index="1"] .launcher-glow { transform: translateX(176px); }
-
-/* -------------------------------------------------------- the focal point */
-
-.launcher-head { position: absolute; top: 48px; left: 0; right: 0; text-align: center; }
-.launcher-halo {
-  position: absolute;
-  left: 50%;
-  top: -60px;
-  width: 520px;
-  height: 330px;
-  margin-left: -260px;
-  /* A white lift, not a green one: the logo art carries its own soft dark
-     shadow for the console's dark plate, and any tint behind it turns that
-     shadow into mush. On white it just needs room to breathe. */
-  background: radial-gradient(closest-side,
-    rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.6) 55%, rgba(255, 255, 255, 0) 78%);
-}
-.launcher-logo { position: relative; width: 200px; height: 131px; margin: 0 auto; }
-.launcher-tagline {
-  position: relative;
-  margin: 18px 0 0;
-  font-size: 20px;
-  letter-spacing: 0.02em;
-  color: #6b7264;
-}
-
-/* ---------------------------------------------------------------- the cards */
-
-.launcher-cards {
-  position: absolute;
-  top: 318px;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: center;
-  gap: 40px;
-}
-.launcher-card {
-  width: 466px;
-  height: 252px;
-  padding: 24px 30px;
-  border: 1px solid rgba(31, 38, 26, 0.14);
-  background: linear-gradient(180deg, #ffffff, #fbfcf9);
-  opacity: 0.72;
-  cursor: pointer;
-  transition:
-    transform 170ms cubic-bezier(0.2, 0.7, 0.2, 1),
-    opacity 170ms ease-out,
-    border-color 170ms ease-out,
-    background 170ms ease-out,
-    box-shadow 260ms ease-out;
-}
-.launcher-card[data-focused="true"] {
-  opacity: 1;
-  transform: scale(1.035);
-  border-color: #6f9f2a;
-  background: linear-gradient(180deg,
-    rgba(140, 196, 59, 0.16), rgba(140, 196, 59, 0.05) 56%, #ffffff);
-  box-shadow: 0 18px 54px -20px rgba(88, 128, 32, 0.55);
-}
-
-.launcher-build {
-  font-size: 15px;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: #7d8676;
-  transition: color 170ms ease-out;
-}
-.launcher-card[data-focused="true"] .launcher-build { color: #5c8a17; }
-
-.launcher-name {
-  margin: 8px 0 0;
-  font-size: 58px;
-  line-height: 1.04;
-  color: #6a7263;
-  transition: color 170ms ease-out;
-}
-.launcher-card[data-focused="true"] .launcher-name { color: #1e2419; }
-
-.launcher-rule {
-  height: 1px;
-  margin: 18px 0 16px;
-  background: rgba(31, 38, 26, 0.12);
-  transition: background 170ms ease-out;
-}
-.launcher-card[data-focused="true"] .launcher-rule { background: rgba(111, 159, 42, 0.55); }
-
-.launcher-blurb {
-  margin: 0;
-  font-size: 20px;
-  line-height: 1.5;
-  color: #767e6f;
-  transition: color 170ms ease-out;
-}
-.launcher-card[data-focused="true"] .launcher-blurb { color: #39402f; }
-
-/* --------------------------------------------------------------- the legend */
-/* What the console draws for A: the 32x32 orb from shrdres/A-Button.png with
-   the letter over it in near-black, and the label to its right in #EBEBEB.
-   (dashuisk/skin.xur, visual legend_A.) */
-
-.launcher-legend {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 54px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 32px;
-  font-size: 20px;
-}
-.launcher-hint { color: #7d8576; }
-.launcher-a { display: flex; align-items: center; gap: 12px; }
-.launcher-orb { position: relative; width: 32px; height: 32px; }
-.launcher-orb-art { width: 32px; height: 32px; }
-.launcher-orb-key {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  color: #0f0f0f;
-}
-.launcher-a-label { color: #23291d; }
-
-/* ----------------------------------------------------------------- the intro */
-/* The page settles once on arrival, then never moves again except in answer
-   to a press. `?boot=none` arrives settled. */
-
-.launcher-head, .launcher-cards, .launcher-legend {
-  transition: opacity 520ms ease-out, transform 520ms cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-.launcher[data-phase="intro"] .launcher-head,
-.launcher[data-phase="intro"] .launcher-cards,
-.launcher[data-phase="intro"] .launcher-legend { opacity: 0; transform: translateY(16px); }
-.launcher[data-phase="intro"] .launcher-glow { opacity: 0; }
-.launcher-cards { transition-delay: 90ms; }
-.launcher-legend { transition-delay: 190ms; }
-.launcher-glow { transition-property: transform, opacity; }
-.launcher-noboot .launcher-head,
-.launcher-noboot .launcher-cards,
-.launcher-noboot .launcher-legend,
-.launcher-noboot .launcher-glow { transition: none; }
-
-/* ---------------------------------------------------------------- the commit */
-
-.launcher[data-phase="going"] .launcher-card[data-focused="true"] {
-  transform: scale(1.06);
-  border-color: #5c8a17;
-  box-shadow: 0 0 0 2px rgba(111, 159, 42, 0.65), 0 26px 80px -20px rgba(88, 128, 32, 0.7);
-}
-.launcher[data-phase="going"] .launcher-card[data-focused="false"] { opacity: 0.2; }
-.launcher[data-phase="going"] .launcher-legend { opacity: 0.25; }
-
 /* ---------------------------------------------------------- the rotate ask */
 /* Shown only while a HANDHELD is held upright (app/orientation.ts decides, and
    it never fires on a desktop window that merely happens to be tall). It is
-   the launcher's page, not a dashboard's: the same off-white ground, the same
-   ConvectionUI face and the same #8CC43B accent, so the two of ours look like
+   ours, not a dashboard's: an off-white ground, the ConvectionUI face and the
+   #8CC43B accent, so the things we drew look like
    one project. Nothing here reaches inside .xui-canvas. */
 
 .rotate {
@@ -412,4 +217,254 @@ html, body {
 /* A short phone in landscape has no room for the glyph; the words carry it. */
 @media (max-height: 420px) {
   .rotate-glyph { display: none; }
+}
+
+/* ------------------------------------------------------------------- room */
+/* The 2008 living room (app/room/). Two stacked layers over one camera:
+   the CSS3DRenderer's DOM underneath, the WebGL canvas on top with a hole cut
+   where the television's glass is. Nothing here styles the dashboard; it
+   styles the box the dashboard is standing in. */
+
+.room { position: absolute; inset: 0; overflow: hidden; background: #0b0c0e; touch-action: none; }
+
+/* Both renderers fill the room and are stacked by document order: CSS3D first,
+   canvas second. The canvas takes NO pointer events, so a click passes through
+   it to the dashboard's own element or to `.room`, which raycasts. Without
+   this the picture would be behind a sheet of glass the browser will not let
+   you touch, and every gesture in Touch.ts would be dead. */
+.room-css3d,
+.room-gl {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+.room-gl { pointer-events: none; }
+/* The CSS3D layer is a transform container, not a surface: only the screen
+   element inside it should ever catch a pointer. */
+.room-css3d { pointer-events: none; }
+
+/* The glass. 1280x720 CSS px scaled down onto the picture plane by
+   app/room/constants.ts's PX, so one dashboard pixel is one console pixel and
+   the measured canvas -> framebuffer transform underneath it is untouched. */
+.room-screen {
+  position: relative;
+  overflow: hidden;
+  background: #000;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+/* The dashboard's viewport takes its insets from the SAFE AREA on a phone,
+   which is meaningless once it is a television in a room: here the picture
+   fills the glass exactly. */
+.room-screen .xui-viewport { inset: 0; }
+
+/* The tube. `.crt-picture` holds the dashboard and is what the warm-up
+   squashes, wobbles and over-brightens (app/room/crt.ts); `.crt-veil` is the
+   white of the line itself. Neither ever takes a pointer event away from the
+   dashboard inside. */
+.crt-picture {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 50%;
+  transform: scaleY(0);
+  /* A filter on this element makes it a containing block for the dashboard's
+     own fixed and 3D-transformed descendants. Everything the runtime lays out
+     is absolutely positioned inside .xui-canvas, so that is a no-op here - but
+     it is the reason the filter goes HERE and not on .room-screen, which also
+     holds the veil. */
+  will-change: transform, filter;
+}
+.crt-veil {
+  position: absolute;
+  inset: 0;
+  background: #eef4ff;
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: 50% 50%;
+  transform: scaleY(0);
+  will-change: transform, opacity;
+}
+
+/* The console's startup animation, which IS the picture until the dashboard
+   is (app/room/startup.ts). It sits over the dashboard and under the line's
+   white and the glass, and it carries the same transform and filter as the
+   picture because during those six seconds it is the same beam. */
+.crt-boot {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  transform-origin: 50% 50%;
+  transform: scaleY(0);
+  pointer-events: none;
+  will-change: transform, filter;
+}
+.crt-boot-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* The console's output is 16:9 and so is the glass, so this never crops.
+     `cover` rather than `contain` anyway: a letterbox inside a television is
+     the one thing a television cannot do. */
+  object-fit: cover;
+}
+/* The hand-off: three frames of video black, measured off a real console.
+   The video goes and the layer stays, so the dashboard is not revealed until
+   the black is over. */
+.crt-boot.is-black .crt-boot-video { visibility: hidden; }
+
+/* The face of the tube. One element, three stacked backgrounds, no animation:
+   this is the GLASS, so it does not squash with the bloom and it does not
+   move. Every opacity here is deliberately low - the picture is a DOM tree
+   being scaled by a CSS3D transform, and a hard 1 px pattern over a
+   non-integer scale is a moire field, not a shadow mask. */
+.crt-face {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    /* Corner falloff. A curved tube behind curved glass loses the corners,
+       and this is the one cue that says "not a flat panel" from across a
+       room. */
+    radial-gradient(126% 122% at 50% 50%, rgba(0, 0, 0, 0) 52%, rgba(0, 0, 0, 0.34) 84%, rgba(0, 0, 0, 0.62) 100%),
+    /* The line structure. 2 px period, barely there. */
+    repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.11) 0 1px, rgba(255, 255, 255, 0.02) 1px 2px),
+    /* The aperture grille: red, green and blue stripes on a 3 px pitch. */
+    repeating-linear-gradient(to right,
+      rgba(255, 60, 60, 0.05) 0 1px,
+      rgba(60, 255, 90, 0.05) 1px 2px,
+      rgba(70, 110, 255, 0.05) 2px 3px);
+  /* A tube is not a pixel grid: the beam has a width, and the glass in front
+     of it scatters. Kept under a pixel so text stays readable. */
+  backdrop-filter: blur(0.4px);
+}
+
+/* ------------------------------------------------------------- the wheel */
+/* Ours, and the only thing on screen the console never drew, so it does not
+   borrow the console's chrome: dark glass, the console's own face for the
+   words, and nothing that looks like a blade. It sits over the room in flat
+   window space, outside the CSS3D transform. */
+
+.room-overlay {
+  position: absolute;
+  inset: 0;
+  /* The layer is a frame, not a surface. Only the wheel inside it takes a
+     pointer, or the whole room would stop being clickable. */
+  pointer-events: none;
+}
+
+.wheel {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top, 0px));
+  left: max(16px, env(safe-area-inset-left, 0px));
+  width: 0;
+  height: 0;
+  font-family: ConvectionUI, ui-sans-serif, system-ui, sans-serif;
+}
+
+.wheel-hub {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 50%;
+  background: rgba(14, 16, 20, 0.62);
+  backdrop-filter: blur(9px);
+  color: #cfd6de;
+  cursor: pointer;
+  pointer-events: auto;
+  display: grid;
+  place-items: center;
+  transition: background 140ms ease, color 140ms ease, transform 220ms cubic-bezier(.2,.7,.2,1);
+}
+.wheel-hub svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+/* The cog: a thick hollow ring with stubby teeth. Hollow matters - a filled
+   centre turns it back into a dial. */
+.wheel-hub svg circle.rim { fill: none; stroke: currentColor; stroke-width: 2.6; }
+.wheel-hub:hover { background: rgba(24, 28, 34, 0.78); color: #eef3f8; }
+.wheel-hub:focus-visible { outline: 2px solid #7ddc4a; outline-offset: 3px; }
+.wheel.is-open .wheel-hub { transform: rotate(58deg); color: #eef3f8; }
+
+/* The arc. Each spoke is placed by an angle and a radius, so adding a fourth
+   dashboard is one entry in SPOKES and no layout at all. */
+.wheel-arc { position: absolute; top: 23px; left: 23px; }
+
+.wheel-spoke {
+  /* The radius and the angles below are not taste. Three labels on a
+     quarter-circle are spaced UNEVENLY by definition - equal angles put the
+     top pair 86 px apart and the bottom pair 55 px - so the radius has to be
+     large enough that the CLOSEST pair still clears a 48 px label. At 112 px
+     they overlapped each other and the third ran off the left edge of the
+     window. */
+  /* --r and --a are both set per spoke in wheel.ts: the y of each is a fixed
+     step and the angle is solved for it, so the labels always clear each other
+     however many entries the wheel has. */
+  --r: 186px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  width: 136px;
+  padding: 7px 12px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
+  /* No backdrop-filter here, deliberately: it promotes every spoke to its own
+     compositor layer whether the wheel is open or shut, and a fourth entry took
+     the room to 25 layers against smoke-mobile's budget of 24. The hub keeps
+     its blur - it is one element and it is always visible - and the spokes pay
+     for the same look with a more opaque ground instead. */
+  background: rgba(14, 16, 20, 0.88);
+  color: #b9c2cc;
+  text-align: left;
+  cursor: pointer;
+  pointer-events: none;
+  opacity: 0;
+  /* Anchored by the LEFT edge, not the centre: a 136 px label centred on its
+     arc point hangs 68 px back toward the hub, which is what put the bottom
+     one off the edge of the window. */
+  transform: translate(0, -50%) rotate(var(--a)) translateX(0) rotate(calc(var(--a) * -1)) scale(0.92);
+  transform-origin: 0 50%;
+  transition:
+    opacity 180ms ease calc(var(--i) * 45ms),
+    transform 320ms cubic-bezier(.2,.8,.2,1) calc(var(--i) * 45ms);
+}
+.wheel.is-open .wheel-spoke {
+  pointer-events: auto;
+  opacity: 1;
+  transform: translate(0, -50%) rotate(var(--a)) translateX(var(--r)) rotate(calc(var(--a) * -1)) scale(1);
+}
+.wheel-spoke b { display: block; font-size: 15px; font-weight: 400; color: #dfe6ee; letter-spacing: 0.01em; }
+.wheel-spoke span { display: block; font-size: 11px; color: #8b95a1; margin-top: 1px; }
+.wheel-spoke:hover:not(:disabled) { border-color: rgba(255, 255, 255, 0.3); background: rgba(26, 31, 38, 0.82); }
+.wheel-spoke:focus-visible { outline: 2px solid #7ddc4a; outline-offset: 2px; }
+/* Dimmed only while the wheel is OPEN. `.wheel-spoke:disabled` is a class
+   plus a pseudo-class, so it outranks the `opacity: 0` on `.wheel-spoke` that
+   hides a closed wheel - which left the one disabled dashboard sitting
+   permanently on top of the hub at 42% while the wheel was shut. */
+.wheel-spoke:disabled { cursor: default; }
+.wheel.is-open .wheel-spoke:disabled { opacity: 0.42; }
+
+/* The power entry is an ACTION on the console, not a choice of what runs on
+   it, so it does not take the "current" fill and it does not sit in the same
+   visual family as the dashboards. */
+.wheel-spoke.is-power { border-color: rgba(255, 255, 255, 0.22); }
+.wheel-spoke.is-power b { color: #eef3f8; }
+.wheel-spoke.is-power:hover { border-color: rgba(255, 140, 120, 0.55); background: rgba(44, 27, 25, 0.95); }
+
+/* Which one is on. No tick and no dot: the name goes solid and the panel
+   fills, the way a selected thing looks when nothing has been added to it. */
+.wheel-spoke.is-current {
+  background: rgba(233, 239, 245, 0.96);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+.wheel-spoke.is-current b { color: #14171c; font-weight: 500; }
+.wheel-spoke.is-current span { color: #4a545f; }
+
+@media (prefers-reduced-motion: reduce) {
+  .wheel-hub, .wheel-spoke { transition-duration: 1ms; }
 }

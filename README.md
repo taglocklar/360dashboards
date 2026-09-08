@@ -26,7 +26,9 @@ npm install
 npm run extract     # Blades 6770; needs the archive + a built xex1tool, see below
 npm run extract -- --build 9199   # NXE 9199 (same pipeline, its own registry and counts)
 npm run extract -- --build 17559  # Metro 17559 (XUR v8; no runtime yet)
-npm run dev         # http://localhost:5173 is the launcher: pick Blades or NXE
+npm run dev         # http://localhost:5173 is the LIVING ROOM: a 2008 front
+                    # room, a 34" CRT, and an Xbox 360 on the shelf under it.
+                    # Press the console's power button. See ROOM.md.
                     # /?build=6770 opens Blades directly, /?build=9199 opens NXE
 npm test            # parser + container unit tests (+ corpus tests for every extracted build)
 npm run smoke       # headless-Chrome suites against the dev server
@@ -88,15 +90,29 @@ Settings row's value is in `reference/frames/6717/f0053-f0066`), and what no
 frame or file settles - the daylight-saving bit, the Family Settings block,
 the xam message boxes behind Initial Setup and Background Downloads' Enable -
 is left on the code's own failed-read path and reported in
-`__dash.shell.hardwareState` / `dialogs`. Routes: `/` is the **launcher**, our
-own 1280x720 page (`app/launcher.ts`, styled in the `.launcher` block of
-`app/styles.css`) that offers the two builds and navigates to `?build=<id>`. It
-is not a dashboard and wears no skin: the only console materials on it are the
-extracted logo (`dashcomm/xboxLogo.png`), the A legend orb
-(`shrdres/A-Button.png`), the `btn_Focus` / `btn_Select` cues and the
-ConvectionUI face, each resolved through the manifest and asserted by
-`smoke-launcher`. `?launcher` opens it explicitly, with `&manual` (step its
-60 Hz clock by hand), `&mute` and `&boot=none` (arrive settled). `?build=6770`
+`__dash.shell.hardwareState` / `dialogs`. Routes: `/` is the **living room** — a 2008 front
+room built in `app/room/`, with a 34" widescreen CRT on a media console and an
+Xbox 360 on the shelf under it, seen from the couch. Press the console's power
+button (click it, or A on the pad) and the ring of light sweeps, the tube warms
+up, the camera leans in, and the console's own startup animation — the sphere,
+the X, the XBOX 360 wordmark — opens out of the scanline before the dashboard
+boots. Three things in that hand-off are measured off a capture of a real
+console rather than chosen: the animation's 4.62 s length, the 50 ms cut to
+black that follows it, and the fact that the 4.9 s the wordmark holds on real
+hardware is the console reading the disc and not animation, so it is cut. The dashboard on
+that set is the REAL one: the same DOM tree, at 60 Hz, in a CSS3DRenderer layer
+that the WebGL room is composited over with a hole punched through the glass.
+The wheel in the top-left corner chooses which dashboard is plugged in, and it
+swaps the build in place without rebuilding the room around it. `ROOM.md` is
+the whole of it: the trick, the sequence, the budgets, and the contract an
+authored model of the console has to arrive on. Everything in that room is
+OURS — no console material anywhere except the dashboard behind the glass — and
+`PLACEHOLDERS.md` says so. The rule for which routes get a television is blunt:
+**named `room`, or no parameters at all**; everything else is the bare 16:9
+stage, so every gate and every judge below is measuring the console's output
+and nothing else. `?room=off` says it out loud, `&power=on` arrives at a hot
+tube, and `&manual` hands the room's clock to `window.__roomApi.step()`.
+`?build=6770`
 is the Blades dashboard — it BOOTS, playing `dashmain`'s own `BootLive`
 range onto Xbox LIVE the way the console's boot dispatcher does (`&boot=<range>`
 picks another of the fifteen, `&boot=none` parks on `DefaultTab`, `&blade=N`
@@ -157,7 +173,7 @@ any of them.
 
 **The rotate ask.** A handheld held UPRIGHT gets our own overlay asking for
 landscape (`app/orientation.ts`, styled in the `.rotate` block of
-`app/styles.css`, the launcher's visual language). It covers the launcher and
+`app/styles.css`). It covers the room and
 both dashboards, it is built and destroyed rather than hidden, and it goes as
 soon as the device turns. Who sees it is decided by
 `matchMedia('(orientation: portrait)')` AND a handheld test - a coarse primary
@@ -193,8 +209,12 @@ compositor budget at phone pixel ratios.
 
 ## Stack
 
-- Vite 8 + TypeScript 5.6 strict, zero runtime dependencies.
-- Rendering: DOM + CSS 3D transforms, inline SVG for vector figures. No WebGL.
+- Vite 8 + TypeScript 5.6 strict. One runtime dependency, three.js, and only
+  the living room uses it: every `?build=` route still loads no WebGL at all.
+- Rendering: the DASHBOARD is DOM + CSS 3D transforms and inline SVG, always,
+  on every route — that is the project, and the living room does not change it.
+  The ROOM around it is three.js, and the two meet at a hole in the television's
+  glass rather than at a texture (ROOM.md).
 - Tests: node's built-in runner; smoke suites drive `puppeteer-core` against
   system Chrome and assert on `window.__dash`.
 - License: GPL-3.0 (the XUR parser is a port of XUIHelper's V5 and V8
@@ -305,15 +325,25 @@ hand-written 9199 XML and the 9199 binary disagree, the binary wins
   `reference/frames/<capture>-30fps/` is absent), and mounts the app twice to
   prove the teardown leaves exactly one viewport, one input router, one clock
   and one audio bank.
-- `tests/smoke/smoke-mobile.mjs` is the handheld gate: the launcher and both
+- `tests/smoke/smoke-mobile.mjs` is the handheld gate: the room and both
   dashboards at iPhone 15 Pro (852x393@3x), iPhone SE (667x375@2x) and iPad
   (1024x768@2x) landscape plus one portrait case, with touch emulation on. It
   asserts no scroll in either axis, the stage inside the visual viewport and
   still the output's own aspect, the rotate overlay present in portrait and
   absent in landscape AND absent on a tall fine-pointer desktop window, a tap
-  that focuses and a second tap that presses on all three routes (through
-  `window.__dash`, never pixels), the swipe axes on both dashboards, B by two
-  fingers, and the compositor budget at phone pixel ratios.
+  that focuses and a second tap that presses on both dashboards (through
+  `window.__dash`, never pixels), a finger on the console's power button in the
+  room — aimed at where the ring of light PROJECTS to on that device, not at a
+  hard-coded corner — the swipe axes on both dashboards, B by two fingers, and
+  the compositor budget at phone pixel ratios.
+- `tests/smoke/smoke-room.mjs` is the living room's gate: that a bare `/` is the
+  room and that every route a judge opens is NOT, that the dashboard really is
+  mounted inside the television's CSS3D screen element, that the set starts cold
+  and unbooted, every moment of the power-on sequence as a frame count under
+  `&manual` (ring, relay, line, bloom, boot, camera), the startup animation on
+  the wall clock (it is a `<video>`, so it is the one thing here that cannot be
+  hand-stepped) with its cut to black asserted opaque frame by frame, and the
+  wheel's in-place build swap with the singleton census after it. ROOM.md is the prose version.
 - `tests/smoke/smoke-nav.mjs` section 8 walks the settings pages: every
   Console Settings row's Current Setting against its own 6717 still, the
   option selects (arrival row, the write, the pop with its cue, the parent's

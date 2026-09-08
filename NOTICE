@@ -17,3 +17,69 @@ served data under public/assets/ (scenes, images, audio, fonts and string
 tables for each build) IS included, so that the site can be built and served
 from this repository alone. That material is Microsoft's and is not covered by
 this repository's GPL-3 licence.
+
+public/room/xbox360-startup.mp4 is the console's startup animation - the sphere,
+the X, the ring and the XBOX 360 wordmark - which plays on the television in the
+living room route before the dashboard boots. It is NOT extracted from the
+archive and cannot be: the animation lives in the console's flash, and no video
+container of any type exists in any of the three dumps. It is a re-encode of a
+capture of a real console's output, trimmed to 5.81 s and scaled to the
+console's own 1280x720. The animation, the sound and the marks in it are
+Microsoft's and are not covered by this repository's GPL-3 licence; the capture
+is a third party's. PLACEHOLDERS.md records it as a stand-in, what was measured
+against it, and what was cut.
+
+public/room/covers/ holds the cover artwork of two games that sit on the coffee
+table in the living room route: Halo 3 (Microsoft / Bungie, 2007) and Call of
+Duty: Modern Warfare 2 (Activision / Infinity Ward, 2009). Neither is from the
+archive - they are not dashboard material and no dump contains them. Each is a
+centre-crop of the game's cover art to an Xbox 360 retail case's 0.7105 aspect,
+scaled to 256x360, used as set dressing at roughly 120 px on screen. That art
+belongs to its publishers and is not covered by this repository's GPL-3 licence.
+PLACEHOLDERS.md records what they are and what was cropped.
+
+public/room/xbox360.glb is "Classic Xbox 360 - White Edition" by Anand Stephen
+(https://sketchfab.com/anandstephen5), from
+https://sketchfab.com/3d-models/classic-xbox-360-white-edition-a88f93403ba64726a4b68611db420a67,
+licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/). It is the
+console standing on the shelf in the living room route.
+
+CHANGES MADE, as CC-BY requires be indicated: the file is re-encoded for the
+web, not re-modelled. Four UV sets that were byte-identical to TEXCOORD_0 were
+deleted and the material repointed at TEXCOORD_0; vertex tangents were dropped
+(three.js derives them from screen-space derivatives); the four meshes, which
+shared one material, were joined into one primitive; the textures were
+re-encoded from PNG to WebP at the same 1024x1024; and positions, normals and
+UVs were quantized and the whole compressed with EXT_meshopt_compression.
+Geometry is UNCHANGED at 186,732 triangles - no decimation was applied - and
+19.39 MB became 1.84 MB. The material's alphaMode was changed from BLEND to
+opaque, which is what an opaque plastic casing is.
+
+The Xbox 360 industrial design and the marks on the casing are Microsoft's.
+
+public/room/xbox360-controller.glb is "XBox 360 controller" by Carlos Nava
+(https://sketchfab.com/carlosnavapa), from
+https://sketchfab.com/3d-models/xbox-360-controller-31f699500e58427ebf042ff75abd4bec,
+licensed CC-BY-SA-4.0 (http://creativecommons.org/licenses/by-sa/4.0/). NOTE
+that this is ShareAlike, a stricter licence than the console model's plain
+CC-BY: it requires that adaptations be shared under a compatible licence.
+Creative Commons declares CC BY-SA 4.0 one-way compatible with GPLv3, which is
+this repository's licence, so the adapted file here is distributed under
+GPL-3.0-only with attribution retained.
+
+CHANGES MADE, as CC-BY-SA requires be indicated: the SHELL was repainted white
+to match the console, and only the shell. The repaint is masked by UV ISLAND -
+the body, its rim, its back and its top - so the thumbsticks, the d-pad, the
+A, B, X and Y buttons, the guide ring and the green Xbox logo are all exactly
+as the author made them. (Keying off saturation instead does not work: the
+sticks and the d-pad are black in the atlas too, and they went white with the
+body.) The material was also corrected: KHR_materials_transmission was
+removed (transmissionFactor was 1.0, which makes the body a window),
+alphaMode BLEND became opaque, doubleSided became single-sided, and
+metallicFactor 0.994 became 0 - it is plastic, not chrome. The emissive map,
+which is black except the guide ring and the logo, is kept at a lower factor.
+For the web, two duplicate UV sets and the vertex tangents were dropped, the
+textures re-encoded from PNG to WebP at the same 1024x1024, and the whole
+quantized and compressed with EXT_meshopt_compression: 2.45 MB became 0.34 MB
+with the geometry UNCHANGED at 26,560 triangles.
+
