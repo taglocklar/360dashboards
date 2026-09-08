@@ -468,3 +468,58 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   .wheel-hub, .wheel-spoke { transition-duration: 1ms; }
 }
+
+/* --------------------------------------------------------- room: loading */
+/* Shown from the first frame of the room route and REMOVED when the room is
+   real (app/room/loading.ts). Ours, not the console's: the room's own dark
+   ground, the extracted ConvectionUI face, and the same green the rotate ask
+   uses. */
+
+.room-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  /* The room's own clear colour, with the lamp's warmth low and left, so the
+     reveal is a lift rather than a cut. */
+  background:
+    radial-gradient(120% 90% at 22% 88%, rgba(255, 201, 140, 0.10), rgba(255, 201, 140, 0) 60%),
+    #0b0c0e;
+  opacity: 1;
+  transition: opacity 420ms ease;
+  font-family: ConvectionUI, ui-sans-serif, system-ui, sans-serif;
+}
+.room-loading.is-going { opacity: 0; }
+
+.room-loading-card { width: min(340px, 68vw); text-align: left; }
+
+.room-loading-title {
+  font-size: 17px;
+  color: #dfe6ee;
+  letter-spacing: 0.01em;
+  margin-bottom: 12px;
+}
+
+.room-loading-track {
+  height: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.room-loading-fill {
+  height: 100%;
+  background: #8cc43b;
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform 260ms ease;
+}
+
+.room-loading-count {
+  margin-top: 9px;
+  font-size: 11px;
+  color: #8b95a1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .room-loading, .room-loading-fill { transition-duration: 1ms; }
+}

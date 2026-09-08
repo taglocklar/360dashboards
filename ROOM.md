@@ -82,6 +82,27 @@ one of those is the room's own (see the trick above and `crt.ts`), and a
 modelled copy would double the artefact. The procedural cabinet and its four
 bezel bars are kept as the stand-in behind the loader's silent error path.
 
+## Nothing is shown until it is real
+
+Every prop in this room is built TWICE: a stand-in of the right size, and the
+authored model that replaces it when it arrives. That is the right way round for
+robustness - a failed fetch leaves a television rather than a hole - but it means
+the first second of the room would be a white box on a shelf, a white slab on a
+table and a grey cabinet, followed by three pops.
+
+So one `THREE.LoadingManager` is shared by every model and texture the room
+fetches, `room.whenLoaded` resolves when it drains, and `loading.ts` covers the
+page until it does. `document.body.dataset.ready` is set AFTER that on this
+route, so a screenshot taken the moment the page says it is ready is of the
+finished room - which also removes a class of flake from the gates.
+
+`whenLoaded` always resolves. An asset that 404s or will not decode still ends
+its item on the manager, so the room opens with the stand-in in place of whatever
+failed, which is exactly what the stand-ins are for; and a request that never
+answers at all is capped at 12 seconds, so nobody is ever trapped on a loading
+screen. The screen is REMOVED rather than hidden - a full-bleed element left in
+the document is a compositor layer, and smoke-mobile counts those.
+
 ## The power-on sequence
 
 Timed in seconds from the button, in `app/room/crt.ts`'s `WARMUP`. Under
@@ -96,7 +117,7 @@ is a frame count and not a wait.
 | 0.44 | **the console's startup animation starts**, behind the line |
 | 0.52 - 0.78 | deflection comes up and the line opens onto an animation already running |
 | 0.78 - 1.53 | the beam limiter catches up and the overshoot decays |
-| 0 - 1.60 | the camera dollies 2.96 m -> 1.45 m and the lens narrows 45 deg -> 25 deg |
+| 0 - 1.60 | the camera dollies 2.96 m -> 1.45 m and the lens narrows 54 deg -> 25 deg |
 | 5.06 | the XBOX 360 wordmark has settled; it holds |
 | 6.25 | **50 ms of black** |
 | 6.30 | the dashboard's own boot range (`BootLive`) |
@@ -188,6 +209,7 @@ Procedural, in code, to real furniture dimensions - `app/room/`:
 | `crt.ts` | the warm-up: the line, the bloom, the overshoot, the degauss wobble, and the measured 50 ms cut |
 | `startup.ts` | the console's startup animation and its hand-off to the dashboard |
 | `wheel.ts` | the corner control that chooses the dashboard |
+| `loading.ts` | the screen you look at while the room is still boxes |
 | `props/shell.ts` | floor, ceiling, four walls, baseboard |
 | `props/stand.ts` | the media console, and the Xbox 360 socket (below) |
 | `props/furnishings.ts` | couch, coffee table, controller and cable, the two games, rug, lamp, window and blinds, wall dressing |

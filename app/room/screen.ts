@@ -53,11 +53,13 @@ export interface TvScreen {
   css: CSS3DObject;
   /** true once the picture is live and the glass is a hole. */
   readonly on: boolean;
+  /** true once the authored television has replaced the stand-in box. */
+  readonly modelLoaded: boolean;
   setOn(on: boolean): void;
   dispose(): void;
 }
 
-export function buildScreen(base: string): TvScreen {
+export function buildScreen(base: string, manager: T.LoadingManager): TvScreen {
   const group = new T.Group();
   group.name = 'television';
   const owned: (T.Material | T.BufferGeometry)[] = [];
@@ -77,6 +79,7 @@ export function buildScreen(base: string): TvScreen {
   // edge. One comparison at load time turns that into a console warning.
   const standIn = new T.Group();
   group.add(standIn);
+  let tvLoaded = false;
 
   // The box and four bars that used to BE the television, kept as the stand-in
   // behind the loader's silent error path - the same shape the console and the
@@ -103,7 +106,7 @@ export function buildScreen(base: string): TvScreen {
   bar(BEZEL.side, SCREEN.h, -(SCREEN.w + BEZEL.side) / 2, SCREEN.y);
   bar(BEZEL.side, SCREEN.h, (SCREEN.w + BEZEL.side) / 2, SCREEN.y);
 
-  new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load(
+  new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder).load(
     `${base}room/crt-tv.glb`,
     (gltf) => {
       const tv = gltf.scene;
@@ -127,6 +130,7 @@ export function buildScreen(base: string): TvScreen {
       assertOpening(tv);
       group.add(tv);
       standIn.visible = false;
+      tvLoaded = true;
     },
     undefined,
     () => { /* no model: the box and bars stay, and they are the right size */ },
@@ -198,6 +202,7 @@ export function buildScreen(base: string): TvScreen {
     startup,
     css,
     get on() { return on; },
+    get modelLoaded() { return tvLoaded; },
     setOn(next: boolean) {
       if (next === on) return;
       on = next;

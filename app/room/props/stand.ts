@@ -112,7 +112,7 @@ export interface Stand {
   dispose(): void;
 }
 
-export function buildStand(base: string): Stand {
+export function buildStand(base: string, manager: T.LoadingManager): Stand {
   const group = new T.Group();
   group.name = 'stand';
   /** Every mesh the authored model brought, once it has arrived. A pointer has
@@ -182,7 +182,7 @@ export function buildStand(base: string): Stand {
   ring.position.set(...XBOX.ringAt);
   con.add(ring);
 
-  const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+  const loader = new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder);
   loader.load(
     `${base}${XBOX.model.src}`,
     (gltf) => {

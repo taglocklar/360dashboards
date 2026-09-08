@@ -40,6 +40,8 @@ export interface RoomOptions {
    *  `manual`, where a <video> element's own clock is not steppable and would
    *  make every gate a race. */
   startup?: boolean;
+  /** Called as the room's own assets arrive, for the loading screen. */
+  onProgress?: (done: number, total: number) => void;
   /** Build no AudioContext and play no sound: `&mute`. */
   muted?: boolean;
   /** Do not run a wall clock: render only when step() is called. What the
@@ -51,6 +53,20 @@ export interface RoomOptions {
 export interface Room {
   /** Where the dashboard mounts: 1280x720 CSS px on the television's glass. */
   screenHost: HTMLElement;
+  /**
+   * Resolves when every model and texture the room asked for has arrived, or
+   * when the wait has gone on too long.
+   *
+   * Nothing should SHOW the room before this: each prop is built twice - a
+   * stand-in of the right size, then the authored model that replaces it - so
+   * the first second is a white box on a shelf, a white slab on a table and a
+   * grey cabinet, followed by three pops.
+   *
+   * It always resolves. A missing or undecodable asset still ends its item on
+   * the manager, but a request that simply never answers would otherwise trap
+   * the viewer on a loading screen forever, so there is a cap.
+   */
+  whenLoaded: Promise<void>;
   /** Press the console's power button: the ring of light sweeps, the tube
    *  warms up, the camera pushes in and onPictureLive fires. Idempotent while
    *  a sequence is already running. */
@@ -97,6 +113,8 @@ export interface RoomReport {
   startup: string;
   /** Whether the controller's own ring and logo are lit. */
   padLit: boolean;
+  /** Whether the television is the authored set or the stand-in cabinet. */
+  tv: 'model' | 'stand-in';
   /** Whether the shelf is holding the authored Xbox 360 or the stand-in box.
    *
    *  A FACT, not a statistic. The obvious way to ask is "are there more than
@@ -180,10 +198,26 @@ export function buildRoom(host: HTMLElement, opts: RoomOptions = {}): Room {
   const shell = buildShell();
   scene.add(shell.group);
   const base = opts.base ?? '';
-  const tv = buildScreen(base);
+
+  // One manager for every model and texture the room fetches, so "is the room
+  // ready" is a single question with a single answer.
+  const manager = new T.LoadingManager();
+  let loadedResolve: () => void = () => {};
+  const whenLoaded = new Promise<void>((res) => { loadedResolve = res; });
+  // 12 seconds. Long enough for 4 MB on a slow connection, short enough that a
+  // request which never answers does not trap anyone on a loading screen.
+  const loadCap = setTimeout(() => loadedResolve(), 12000);
+  manager.onLoad = () => { clearTimeout(loadCap); loadedResolve(); };
+  manager.onProgress = (_url, done, total) => opts.onProgress?.(done, total);
+  // An asset that 404s or will not decode still ends its item, so onLoad still
+  // fires and the room still opens - with the stand-in in place of whatever
+  // failed, which is exactly what the stand-ins are for.
+  manager.onError = (url) => console.warn(`[room] could not load ${url}`);
+
+  const tv = buildScreen(base, manager);
   scene.add(tv.group);
   scene.add(tv.css);
-  const stand = buildStand(base);
+  const stand = buildStand(base, manager);
   scene.add(stand.group);
 
   const lights = addLights(scene);
@@ -192,9 +226,9 @@ export function buildRoom(host: HTMLElement, opts: RoomOptions = {}): Room {
   // bulb with no shade around it are the two halves of the same bug.
   // The table is held by name as well as in the list: the room does two things
   // with the controller on it, and both need a handle.
-  const table = buildTable(base);
+  const table = buildTable(base, manager);
   const props: Prop[] = [
-    buildRug(), buildCouch(), table, buildWallDressing(base),
+    buildRug(), buildCouch(), table, buildWallDressing(base, manager),
     buildLamp(lights.lampPos), buildWindow(lights.windowPos),
   ];
   for (const p of props) scene.add(p.group);
@@ -408,6 +442,7 @@ export function buildRoom(host: HTMLElement, opts: RoomOptions = {}): Room {
   const room: Room = {
     overlay,
     screenHost: tv.host,
+    whenLoaded,
     get powered() { return powered; },
     setPower(on: boolean) {
       if (on === powered) return;
@@ -464,6 +499,7 @@ export function buildRoom(host: HTMLElement, opts: RoomOptions = {}): Room {
       }
     },
     dispose() {
+      clearTimeout(loadCap);
       if (raf) cancelAnimationFrame(raf);
       removeEventListener('resize', onResize);
       visualViewport?.removeEventListener('resize', onResize);
@@ -487,6 +523,7 @@ export function buildRoom(host: HTMLElement, opts: RoomOptions = {}): Room {
         warm: +warm.toFixed(3),
         ring: Math.max(0, ringLit),
         startup: tv.startup.state,
+        tv: tv.modelLoaded ? 'model' : 'stand-in',
         console: stand.modelLoaded ? 'model' : 'stand-in',
         padLit,
         draws: info.calls,
@@ -548,7 +585,12 @@ function addLights(scene: T.Scene): { glow: T.PointLight; lampPos: readonly [num
 
   // A cold sliver from the window on the right wall, so the beige has
   // something to be beige against.
-  const windowPos = [ROOM.w / 2 - 0.02, 1.42, ROOM.back + 2.0] as const;
+  // Forward of where it started (ROOM.back + 2.0), so it is actually IN the
+  // idle shot. At the old position its centre sat 55.7 degrees off the view
+  // axis and no lens was going to reach it; here it is 42.1, just inside the
+  // 42.2 the idle fov gives. A room whose only cool light comes from something
+  // nobody can see is a room lit by magic.
+  const windowPos = [ROOM.w / 2 - 0.02, 1.42, ROOM.back + 1.0] as const;
   const window_ = new T.RectAreaLight(0x9fc2ff, 1.6, 1.2, 1.1);
   window_.position.set(...windowPos);
   window_.lookAt(0, 1.0, windowPos[2]);

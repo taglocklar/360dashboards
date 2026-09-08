@@ -107,7 +107,7 @@ export function buildCouch(): Prop {
  * of the seat, low and wide, and it is what turns a photograph of a wall into
  * a photograph taken from somewhere.
  */
-export function buildTable(base: string): TableProp {
+export function buildTable(base: string, manager: T.LoadingManager): TableProp {
   const { keep, dispose } = ledger();
   const group = new T.Group();
   group.name = 'coffee-table';
@@ -173,7 +173,7 @@ export function buildTable(base: string): TableProp {
 
   const padTargets: T.Object3D[] = [stub];
   const padLights: T.MeshStandardMaterial[] = [];
-  loadPad(pad, stub, base, padTargets, padLights);
+  loadPad(pad, stub, base, manager, padTargets, padLights);
 
 
   // Two game cases, stacked and not square to each other. An Xbox 360 retail
@@ -196,7 +196,7 @@ export function buildTable(base: string): TableProp {
     { cover: 'mw2.jpg', level: 0, yaw: 0.12, dx: 0, dz: 0 },
   ];
   const plastic = keep(new T.MeshStandardMaterial({ color: 0x1c6b23, roughness: 0.32, metalness: 0.02 }));
-  const loader = new T.TextureLoader();
+  const loader = new T.TextureLoader(manager);
   for (const g of games) {
     // The top face is index 2 of BoxGeometry's [+x, -x, +y, -y, +z, -z].
     const art = keep(new T.MeshStandardMaterial({ color: 0x1c6b23, roughness: 0.36, metalness: 0.02 }));
@@ -348,7 +348,7 @@ export function buildWindow(pos: readonly [number, number, number]): Prop {
  * plugged in under, and the fix for the acre of empty beige the first
  * screenshot had either side of the television.
  */
-export function buildWallDressing(base: string): Prop {
+export function buildWallDressing(base: string, manager: T.LoadingManager): Prop {
   const { keep, dispose } = ledger();
   const group = new T.Group();
   group.name = 'wall-dressing';
@@ -376,7 +376,7 @@ export function buildWallDressing(base: string): Prop {
   const art = new T.Mesh(keep(new T.PlaneGeometry(0.40, 0.58)), artMat);
   art.position.set(-1.42, 1.46, wallZ + 0.016);
   group.add(art);
-  new T.TextureLoader().load(
+  new T.TextureLoader(manager).load(
     `${base}room/wall-art.svg`,
     (tex) => {
       tex.colorSpace = T.SRGBColorSpace;
@@ -447,11 +447,12 @@ function loadPad(
   pad: T.Group,
   stub: T.Mesh,
   base: string,
+  manager: T.LoadingManager,
   targets: T.Object3D[],
   lights: T.MeshStandardMaterial[],
 ): void {
   const SCALE = 0.8205;
-  new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load(
+  new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder).load(
     `${base}room/xbox360-controller.glb`,
     (gltf) => {
       const m = gltf.scene;

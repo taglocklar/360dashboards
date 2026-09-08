@@ -59,12 +59,20 @@ export const ROOM = {
  *  paying attention.
  *
  *  The numbers: at fov 25 deg and 1.45 m the frame is 2*1.45*tan(12.5)*16/9 =
- *  1.144 m across, so the 0.752 m picture fills 66% of it. Not more: at 75%
+ *  1.144 m across, so the 0.752 m picture fills 66% of it.
+ *
+ *  The IDLE fov is 54, not the 45 it started at. A vertical fov of 45 on 16:9
+ *  is 36.4 degrees of half-horizontal, and the room's own furniture sits wider
+ *  than that: the window on the right wall was 55.7 degrees off the view axis,
+ *  which no sane lens reaches - even a 70 deg fisheye only gets to 51.2. So the
+ *  lens opened to 42.2 degrees of half-horizontal AND the window moved forward
+ *  to meet it (see addLights and buildWindow). Widening alone would not have
+ *  done it, and that is worth knowing before anyone tries again. Not more: at 75%
  *  the bezel leaves the frame entirely and the room goes with it, and a room
  *  you cannot see while you are using the dashboard is a room that was not
  *  worth building. */
 export const CAMERA = {
-  idle: { pos: [0.16, 1.05, 1.72] as const, target: [0, SCREEN.y, SCREEN.z] as const, fov: 45 },
+  idle: { pos: [0.16, 1.05, 1.72] as const, target: [0, SCREEN.y, SCREEN.z] as const, fov: 54 },
   viewing: { pos: [0, SCREEN.y + 0.02, SCREEN.z + 1.45] as const, target: [0, SCREEN.y, SCREEN.z] as const, fov: 25 },
   /** Seconds for the push-in, and for the pull-out. */
   pushIn: 1.6,

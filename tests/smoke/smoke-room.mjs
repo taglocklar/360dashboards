@@ -125,8 +125,21 @@ try {
     // holding, as a fact. Do NOT infer this from `tris`: that is read off the
     // renderer's last render, and under `&manual` the room renders once at
     // build time, before anything fetched over the network can have arrived.
-    await page.waitForFunction(() => window.__room().console === 'model', { timeout: 20000 })
-      .catch(() => check(false, 'the authored Xbox 360 never loaded: the shelf is still holding the stand-in box'));
+    // By the time the page says it is READY, the room must be the real room.
+    // Every prop is built twice - a stand-in of the right size, then the
+    // authored model - so a route that reveals before the models land shows a
+    // white box on a shelf, a white slab on a table and a grey cabinet, and
+    // then three pops. The loading screen exists to make that impossible, and
+    // these three assertions are what say it still does.
+    const built = await page.evaluate(() => ({
+      room: window.__room(),
+      loading: !!document.querySelector('.room-loading'),
+      pad: window.__roomApi.padPoint() !== null,
+    }));
+    check(built.loading === false, 'the loading screen is still on the page after ready');
+    check(built.room.console === 'model', 'ready with the stand-in box on the shelf, not the Xbox');
+    check(built.room.tv === 'model', 'ready with the stand-in cabinet, not the television');
+    check(built.pad, 'ready with no controller on the table');
 
     // The room's own served assets. A missing one is silent in three.js too -
     // the prop keeps its fallback material and the scene renders fine - so a

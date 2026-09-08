@@ -63,6 +63,7 @@ import { populateLists } from '@dash/blades/lists';
 import { DEFAULT_BOOT } from '@dash/blades/boot';
 import { buildRoom, type Room } from './room/Room';
 import { buildWheel } from './room/wheel';
+import { buildLoadingScreen } from './room/loading';
 import { watchOrientation } from './orientation';
 import type { NavDirection } from '@dash/blades/focus';
 
@@ -274,9 +275,18 @@ async function main(): Promise<void> {
   // flat. `?room=off` is the escape hatch back to the bare 16:9 stage.
   let room: Room | null = null;
   const wantsRoom = wantsTheRoom();
+  let loading: ReturnType<typeof buildLoadingScreen> | null = null;
   if (wantsRoom) {
     deferBoot = params.get('blade') === null && params.get('boot') !== 'none';
+    // Up before the room is, and down only once the room is REAL. Every prop
+    // here is built twice - a stand-in of the right size, then the authored
+    // model that replaces it - so without this the first second of the room is
+    // a white box on a shelf, a white slab on a table and a grey cabinet,
+    // followed by three pops as the real things land.
+    loading = buildLoadingScreen(host);
+    onDispose(() => loading?.dispose());
     const r = buildRoom(host, {
+      onProgress: (done, total) => loading?.setProgress(done, total),
       manual: params.has('manual'),
       base: import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : import.meta.env.BASE_URL + '/',
       // The console's startup animation - the sphere, the X, the wordmark -
@@ -310,7 +320,15 @@ async function main(): Promise<void> {
     onDispose(wheel.dispose);
   }
   const telemetry = await mountDashboard(build);
-  if (room) startRoom(room);
+  if (room) {
+    // The dashboard is mounted; wait for the ROOM's own models and textures
+    // before showing any of it. `whenLoaded` always resolves - a failed asset
+    // still ends its item, and a request that never answers is capped - so
+    // this cannot trap anyone on the loading screen.
+    await room.whenLoaded;
+    await loading?.finish();
+    startRoom(room);
+  }
   // AFTER the route: publish() replaces the telemetry's errors with the
   // scene report's, so a message pushed before it would vanish.
   if (error) telemetry.errors.push(error);
