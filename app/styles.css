@@ -221,14 +221,14 @@ html, body {
 
 /* ------------------------------------------------------------------- room */
 /* The 2008 living room (app/room/). Two stacked layers over one camera:
-   the CSS3DRenderer's DOM underneath, the WebGL canvas on top with a hole cut
+   the picture's DOM underneath, the WebGL canvas on top with a hole cut
    where the television's glass is. Nothing here styles the dashboard; it
    styles the box the dashboard is standing in. */
 
 .room { position: absolute; inset: 0; overflow: hidden; background: #0b0c0e; touch-action: none; }
 
-/* Both renderers fill the room and are stacked by document order: CSS3D first,
-   canvas second. The canvas takes NO pointer events, so a click passes through
+/* Both layers fill the room and are stacked by document order: the picture
+   first, canvas second. The canvas takes NO pointer events, so a click passes through
    it to the dashboard's own element or to `.room`, which raycasts. Without
    this the picture would be behind a sheet of glass the browser will not let
    you touch, and every gesture in Touch.ts would be dead. */
@@ -241,7 +241,7 @@ html, body {
   height: 100%;
 }
 .room-gl { pointer-events: none; }
-/* The CSS3D layer is a transform container, not a surface: only the screen
+/* The picture layer is a container, not a surface: only the screen
    element inside it should ever catch a pointer. */
 .room-css3d { pointer-events: none; }
 
@@ -249,7 +249,15 @@ html, body {
    app/room/constants.ts's PX, so one dashboard pixel is one console pixel and
    the measured canvas -> framebuffer transform underneath it is untouched. */
 .room-screen {
-  position: relative;
+  /* Placed by app/room/project.ts: absolutely at the layer's origin with the
+     transform origin in its top-left corner, because the homography maps the
+     element's own (0,0)-(1280,720) box onto the glass. Both of those are
+     load-bearing - a `relative` box or a centred origin moves the picture off
+     the hole. */
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
   overflow: hidden;
   background: #000;
   pointer-events: auto;
@@ -318,7 +326,7 @@ html, body {
 /* The face of the tube. One element, three stacked backgrounds, no animation:
    this is the GLASS, so it does not squash with the bloom and it does not
    move. Every opacity here is deliberately low - the picture is a DOM tree
-   being scaled by a CSS3D transform, and a hard 1 px pattern over a
+   being scaled by a projective transform, and a hard 1 px pattern over a
    non-integer scale is a moire field, not a shadow mask. */
 .crt-face {
   position: absolute;
@@ -345,7 +353,7 @@ html, body {
 /* Ours, and the only thing on screen the console never drew, so it does not
    borrow the console's chrome: dark glass, the console's own face for the
    words, and nothing that looks like a blade. It sits over the room in flat
-   window space, outside the CSS3D transform. */
+   window space, outside the picture's transform. */
 
 .room-overlay {
   position: absolute;

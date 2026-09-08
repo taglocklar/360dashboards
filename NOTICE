@@ -38,6 +38,17 @@ scaled to 256x360, used as set dressing at roughly 120 px on screen. That art
 belongs to its publishers and is not covered by this repository's GPL-3 licence.
 PLACEHOLDERS.md records what they are and what was cropped.
 
+public/room/posters/ holds the cover artwork of four more games, hung as
+posters on the living room's walls: Gears of War 2 (Microsoft / Epic Games,
+2008), BioShock (2K Games / 2K Boston, 2007), Fallout 3 (Bethesda Softworks,
+2008) and Left 4 Dead (Valve, 2008). Like the two on the coffee table, none is
+from the archive and no dump contains them. Each is the low-resolution cover
+image from that game's English Wikipedia article, re-encoded as JPEG at its
+original size (270x370, 285x353, 244x408 and 258x387) and used as set dressing
+at roughly 150 to 250 px on screen; each plane in the room is sized to its own
+file's aspect, so nothing is cropped or stretched. That art belongs to its publishers and is not covered by this
+repository's GPL-3 licence. PLACEHOLDERS.md records what each one is.
+
 public/room/xbox360.glb is "Classic Xbox 360 - White Edition" by Anand Stephen
 (https://sketchfab.com/anandstephen5), from
 https://sketchfab.com/3d-models/classic-xbox-360-white-edition-a88f93403ba64726a4b68611db420a67,

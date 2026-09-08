@@ -141,18 +141,72 @@ try {
     check(built.room.tv === 'model', 'ready with the stand-in cabinet, not the television');
     check(built.pad, 'ready with no controller on the table');
 
+    // The room's DRESSING - the shelves, the plushies, the table clutter. All
+    // of it is procedural, so unlike the models and the posters there is no
+    // fetch that can prove it arrived: an exception thrown halfway through
+    // buildGamerShelf() would leave a room that still renders, still passes
+    // every assertion above, and is simply empty again. The merged meshes are
+    // named, so ask for them by name.
+    const dressing = await page.evaluate(() => {
+      const want = ['shelf-soft', 'shelf-hard', 'clutter-soft', 'clutter-hard'];
+      const found = [];
+      // The room hangs its scene off the canvas element's own three objects, so
+      // walk what is actually rendering rather than a module-level handle.
+      const seen = new Set(want);
+      const walk = (o) => { if (seen.has(o.name)) found.push(o.name); o.children.forEach(walk); };
+      walk(window.__roomApi.scene());
+      return { found, want };
+    });
+    for (const w of dressing.want) {
+      check(dressing.found.includes(w), `the room is missing its "${w}" dressing`);
+    }
+
+    // THE PICTURE IS ON THE HOLE.
+    //
+    // The dashboard is a DOM element placed by a homography onto the rectangle
+    // the WebGL glass occupies (app/room/project.ts). Nothing else in this file
+    // can tell whether it LANDED there: every assertion about the hole is about
+    // the WebGL side, and the element's own layout box is correct even when the
+    // picture is painted somewhere else entirely - which is precisely how iOS
+    // put the dashboard low in the tube with its bottom cut off while Chrome
+    // looked perfect.
+    //
+    // So compare the two directly: the quad the room projects the glass to, and
+    // the box the browser gives the element. The element's box is the axis-
+    // aligned bounds of that quad, so they must agree to within a pixel.
+    const fit = await page.evaluate(() => window.__roomApi.screenFit());
+    const xs = fit.quad.filter((_, i) => i % 2 === 0);
+    const ys = fit.quad.filter((_, i) => i % 2 === 1);
+    const want = [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
+    const off = want.map((v, i) => Math.abs(v - fit.box[i]));
+    check(Math.max(...off) <= 1.5,
+      `the picture is not on the hole: projected ${want.map((v) => v.toFixed(1))} vs element ${fit.box.map((v) => v.toFixed(1))}`);
+    check(fit.box[2] > 20 && fit.box[3] > 10, `the picture collapsed: ${fit.box.join(',')}`);
+
     // The room's own served assets. A missing one is silent in three.js too -
     // the prop keeps its fallback material and the scene renders fine - so a
     // deploy that dropped them would look right in every screenshot until
     // somebody leaned in.
+    //
+    // The STATUS IS NOT THE TEST, and for a long time this check thought it
+    // was. Vite's dev server answers an unknown path with the SPA fallback:
+    // `GET /room/nope.glb` returns **200 text/html**, the contents of
+    // index.html. So a check that only asserted "200" could never fail, for any
+    // asset, and it did not - deleting a file and re-running it passed. What
+    // separates a served asset from the fallback is the CONTENT TYPE, so that
+    // is what is asserted: 200, and anything but html.
     const assets = await page.evaluate(() => Promise.all(
       ['room/covers/halo3.jpg', 'room/covers/mw2.jpg', 'room/wall-art.svg',
+       'room/posters/gears2.jpg', 'room/posters/bioshock.jpg', 'room/posters/fallout3.jpg',
+       'room/posters/left4dead.jpg',
        'room/xbox360-startup.mp4', 'room/xbox360.glb', 'room/xbox360-controller.glb',
        'room/crt-tv.glb']
         .map((u) => fetch(u, { method: 'HEAD' })
-          .then((r) => `${u} ${r.status}`)
+          .then((r) => `${u} ${r.status} ${(r.headers.get('content-type') || '?').split(';')[0]}`)
           .catch((e) => `${u} FAILED ${e.message}`))));
-    for (const a of assets) check(/ 200$/.test(a), `room asset: ${a}`);
+    for (const a of assets) {
+      check(/ 200 /.test(a) && !/ text\/html$/.test(a), `room asset: ${a}`);
+    }
     await page.close();
   }
 

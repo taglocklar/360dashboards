@@ -233,30 +233,97 @@ export function buildTable(base: string, manager: T.LoadingManager): TableProp {
   };
 }
 
-/** The rug everything stands on. One plane, because it is one plane. */
+/**
+ * The rug everything stands on.
+ *
+ * It used to be one flat plane in a brown three shades off the floor's brown,
+ * and the result was that the room had no rug in it: you cannot see a rug you
+ * cannot find the edge of. It is drawn now, on a canvas, because the only
+ * thing that separates a rug from a painted floor is a BORDER, and a border is
+ * two rectangles and a stripe rather than any amount of geometry.
+ *
+ * Drawn at 512 x 342 for a 3.0 x 2.0 m rug - about 170 px per metre, which is
+ * far more than the ~60 px of it that survive to the screen between the stand
+ * and the coffee table. The extra is not waste: it is what stops the border
+ * turning to mush when the camera pushes in.
+ */
 export function buildRug(): Prop {
   const { keep, dispose } = ledger();
   const group = new T.Group();
   group.name = 'rug';
+
+  // 2.70 x 1.90, back at z 0.40. Both were bigger and further forward, and the
+  // cost was that the rug's front border ran across the bottom of the idle
+  // frame as a bright diagonal - the most eye-catching thing in the shot, for a
+  // piece of floor. A rug wants to be found UNDER the furniture, not to be the
+  // furniture.
   const m = new T.Mesh(
-    keep(new T.PlaneGeometry(3.0, 2.0)),
-    keep(new T.MeshStandardMaterial({ color: 0x4a3f3a, roughness: 1, metalness: 0 })),
+    keep(new T.PlaneGeometry(2.70, 1.90)),
+    keep(new T.MeshStandardMaterial({ map: keep(rugTexture()), roughness: 1, metalness: 0 })),
   );
   m.rotation.x = -Math.PI / 2;
-  m.position.set(0, 0.004, 0.55);
+  m.position.set(0, 0.004, 0.40);
   m.receiveShadow = true;
   group.add(m);
-  // A border, one shade lighter, which is the whole pattern a cheap rug has.
-  const b = new T.Mesh(
-    keep(new T.RingGeometry(1.32, 1.40, 4, 1)),
-    keep(new T.MeshStandardMaterial({ color: 0x60524a, roughness: 1, side: T.DoubleSide })),
-  );
-  b.rotation.x = -Math.PI / 2;
-  b.rotation.z = Math.PI / 4;
-  b.scale.set(1.05, 0.70, 1);
-  b.position.set(0, 0.005, 0.55);
-  group.add(b);
   return { group, dispose };
+}
+
+/** The rug's pattern: a rust field, a cream border and a pinstripe, which is
+ *  every mass-market rug sold in 2008 and the cheapest thing that reads as
+ *  "somebody chose this" rather than "the floor changed colour here". */
+function rugTexture(): T.Texture {
+  const W = 512, H = 342;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d')!;
+
+  g.fillStyle = '#8a5140';
+  g.fillRect(0, 0, W, H);
+  // Border, then the field inside it a shade deeper so the border reads as
+  // raised rather than as a painted line.
+  const inset = 26;
+  // Muted, not cream. At full contrast this band is the brightest thing below
+  // the television and it pulls the eye straight off the screen.
+  g.strokeStyle = '#a98a68';
+  g.lineWidth = 15;
+  g.strokeRect(inset, inset, W - inset * 2, H - inset * 2);
+  g.strokeStyle = '#5e3428';
+  g.lineWidth = 3;
+  g.strokeRect(inset + 14, inset + 14, W - (inset + 14) * 2, H - (inset + 14) * 2);
+  g.fillStyle = '#7c4636';
+  g.fillRect(inset + 18, inset + 18, W - (inset + 18) * 2, H - (inset + 18) * 2);
+
+  // A centre medallion: four diamonds, which is as much pattern as survives
+  // being looked at from four metres away through a coffee table.
+  g.strokeStyle = '#c9a882';
+  g.lineWidth = 4;
+  for (let i = 0; i < 4; i++) {
+    const r = 46 + i * 24;
+    g.beginPath();
+    g.moveTo(W / 2, H / 2 - r * 0.62);
+    g.lineTo(W / 2 + r, H / 2);
+    g.lineTo(W / 2, H / 2 + r * 0.62);
+    g.lineTo(W / 2 - r, H / 2);
+    g.closePath();
+    g.stroke();
+  }
+  // Pile: a wash of fine horizontal streaks, so the flat colour has a grain in
+  // it. Deterministic, from an integer hash rather than Math.random, because
+  // the room must be the same room on the next load and on the next
+  // screenshot.
+  g.globalAlpha = 0.06;
+  for (let i = 0; i < 900; i++) {
+    const h = (i * 2654435761) >>> 0;
+    g.fillStyle = (h & 1) ? '#000000' : '#ffffff';
+    g.fillRect((h >>> 8) % W, (h >>> 20) % H, 3 + ((h >>> 4) & 7), 1);
+  }
+  g.globalAlpha = 1;
+
+  const tex = new T.CanvasTexture(c);
+  tex.colorSpace = T.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return tex;
 }
 
 /** The floor lamp the room's warm light comes out of. Its bulb sits exactly
@@ -354,27 +421,97 @@ export function buildWallDressing(base: string, manager: T.LoadingManager): Prop
   group.name = 'wall-dressing';
   const wallZ = ROOM.back + 0.02;
 
-  // The print: a black frame, a mat, and a rectangle of colour. Deliberately
-  // abstract - anything representational here is a licence question.
+  // POSTERS, and where they are allowed to be.
+  //
+  // Real game art, not invented art: these are the covers of three games a 360
+  // owner had on the wall in 2009, stuck up unframed the way posters actually
+  // are. NOTICE and PLACEHOLDERS.md record whose art each one is - that is the
+  // same disclosed-stand-in path the two cases on the coffee table already take
+  // and it is the only path anything representational gets onto a wall by.
+  //
+  // Each plane's HEIGHT is chosen and its width comes from the file's own pixel
+  // dimensions, so no poster is ever stretched - the same rule the seascape
+  // below is drawn to. `fallback` is roughly what the image averages to, so a
+  // poster that never loads is a dim rectangle of about the right colour rather
+  // than a white hole in the wall.
+  //
+  // Wall geography, once, so the next person does not have to re-derive it:
+  // the shelves own the column at x -1.42, the television and its stand own
+  // -0.66..+0.66, the DVD rack owns 1.24..1.44 up to y 1.28, and the framed
+  // print has moved to the gap between the set and the rack. What is left is
+  // the wall ABOVE all of it, from about y 1.5 to the top of frame at 2.2.
+  const posters: {
+    file: string; px: readonly [number, number]; h: number;
+    pos: readonly [number, number, number]; ry: number; fallback: number;
+  }[] = [
+    { file: 'gears2.jpg', px: [270, 370], h: 0.68, pos: [-1.42, 1.86, wallZ + 0.004], ry: 0, fallback: 0x4a4740 },
+    { file: 'bioshock.jpg', px: [285, 353], h: 0.62, pos: [1.36, 1.86, wallZ + 0.004], ry: 0, fallback: 0x2e3a44 },
+    // Directly over the set. This is the one wall the PHONE sees: in portrait
+    // the frame crops to the television and the metre of wall above it, so the
+    // shelves and the other two posters are all outside it and this is the only
+    // dressing a phone gets. It is small and it sits high, so on desktop it
+    // completes the gallery without crowding the picture.
+    { file: 'left4dead.jpg', px: [258, 387], h: 0.55, pos: [-0.06, 1.62, wallZ + 0.004], ry: 0, fallback: 0x36322c },
+    // The left wall, which had nothing on it at all. It is steeply foreshortened
+    // from the couch, and that is the point: it is the only thing in the shot
+    // that tells you the room has a left-hand side.
+    { file: 'fallout3.jpg', px: [244, 408], h: 0.78, pos: [-ROOM.w / 2 + 0.016, 1.50, -1.28], ry: Math.PI / 2, fallback: 0x46433a },
+  ];
+  const posterLoader = new T.TextureLoader(manager);
+  for (const p of posters) {
+    const w = p.h * (p.px[0] / p.px[1]);
+    const m = keep(new T.MeshStandardMaterial({ color: p.fallback, roughness: 0.86 }));
+    const mesh = new T.Mesh(keep(new T.PlaneGeometry(w, p.h)), m);
+    mesh.position.set(...p.pos);
+    mesh.rotation.y = p.ry;
+    // Paper is thin, so it gets no frame and no backing board - but it does
+    // cast, which is the whole of what separates a poster from a painted
+    // rectangle at this distance.
+    mesh.castShadow = true;
+    group.add(mesh);
+    posterLoader.load(
+      `${base}room/posters/${p.file}`,
+      (tex) => {
+        tex.colorSpace = T.SRGBColorSpace;
+        tex.anisotropy = 8;
+        keep(tex);
+        m.map = tex;
+        m.color.setHex(0xffffff);
+        m.needsUpdate = true;
+      },
+      undefined,
+      () => { /* no art: the paper keeps its average colour, and that is fine */ },
+    );
+  }
+
+  // The print: a black frame, a mat, and a picture.
+  //
+  // It has MOVED. It used to hang at x -1.42, which is now the shelves' column,
+  // and it was left intersecting them - a frame with two boards and a rabbit
+  // growing through it. Here it fills the one piece of wall the room had no
+  // plan for, between the television and the DVD rack, and it is smaller: at
+  // its old 0.62 x 0.82 it crowded the rack, and a print in a gap wants to be
+  // read as filling the gap rather than as fighting for it.
+  const PRINT = [0.95, 1.30, wallZ] as const;
   const frameMat = keep(new T.MeshStandardMaterial({ color: 0x181614, roughness: 0.4 }));
-  const f = new T.Mesh(keep(new T.BoxGeometry(0.62, 0.82, 0.028)), frameMat);
-  f.position.set(-1.42, 1.44, wallZ);
+  const f = new T.Mesh(keep(new T.BoxGeometry(0.465, 0.615, 0.028)), frameMat);
+  f.position.set(...PRINT);
   f.castShadow = true;
   group.add(f);
-  const mat = new T.Mesh(keep(new T.PlaneGeometry(0.54, 0.74)), keep(new T.MeshStandardMaterial({ color: 0xe9e4d9, roughness: 0.95 })));
-  mat.position.set(-1.42, 1.44, wallZ + 0.015);
+  const mat = new T.Mesh(keep(new T.PlaneGeometry(0.405, 0.555)), keep(new T.MeshStandardMaterial({ color: 0xe9e4d9, roughness: 0.95 })));
+  mat.position.set(PRINT[0], PRINT[1], PRINT[2] + 0.015);
   group.add(mat);
   // The picture itself: an original dusk seascape, drawn for this room as an
   // SVG (public/room/wall-art.svg). It is ORIGINAL - it reproduces no real
   // artwork, photograph or poster and carries no text - which is the only kind
   // of picture that can hang here without an entry in PLACEHOLDERS.md.
   //
-  // 800x1160 is the plane's own 0.40 x 0.58 exactly, so nothing is stretched.
+  // 800x1160 is the plane's own 0.30 x 0.435 exactly, so nothing is stretched.
   // The fallback colour is the deep teal it averages to: a frame that loads
   // nothing still reads as a framed picture rather than as a hole in the wall.
   const artMat = keep(new T.MeshStandardMaterial({ color: 0x2f5d6e, roughness: 0.9 }));
-  const art = new T.Mesh(keep(new T.PlaneGeometry(0.40, 0.58)), artMat);
-  art.position.set(-1.42, 1.46, wallZ + 0.016);
+  const art = new T.Mesh(keep(new T.PlaneGeometry(0.30, 0.435)), artMat);
+  art.position.set(PRINT[0], PRINT[1] + 0.015, PRINT[2] + 0.016);
   group.add(art);
   new T.TextureLoader(manager).load(
     `${base}room/wall-art.svg`,

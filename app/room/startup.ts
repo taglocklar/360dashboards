@@ -7,7 +7,7 @@
 // output, re-encoded, and PLACEHOLDERS.md says exactly that.
 //
 // It plays as DOM, like everything else on this glass: a <video> element in
-// the CSS3D layer, behind the hole in the WebGL television. That means the
+// the picture's layer, behind the hole in the WebGL television. That means the
 // warm-up squashes and over-brightens it exactly as it does the dashboard,
 // because during these six seconds it IS the picture.
 //

@@ -92,7 +92,11 @@ the xam message boxes behind Initial Setup and Background Downloads' Enable -
 is left on the code's own failed-read path and reported in
 `__dash.shell.hardwareState` / `dialogs`. Routes: `/` is the **living room** — a 2008 front
 room built in `app/room/`, with a 34" widescreen CRT on a media console and an
-Xbox 360 on the shelf under it, seen from the couch. Press the console's power
+Xbox 360 on the shelf under it, seen from the couch. It is somebody's room and
+not a showroom: shelves of plushies, game posters on two walls, a rug with a
+border on it, and a mug, a can and a bag of crisps on the table beside the pad.
+All of that dressing is procedural and costs four draw calls between it, which
+is what `props/kit.ts` is for. Press the console's power
 button (click it, or A on the pad) and the ring of light sweeps, the tube warms
 up, the camera leans in, and the console's own startup animation — the sphere,
 the X, the XBOX 360 wordmark — opens out of the scanline before the dashboard
@@ -100,7 +104,7 @@ boots. Three things in that hand-off are measured off a capture of a real
 console rather than chosen: the animation's 4.62 s length, the 50 ms cut to
 black that follows it, and the fact that the 4.9 s the wordmark holds on real
 hardware is the console reading the disc and not animation, so it is cut. The dashboard on
-that set is the REAL one: the same DOM tree, at 60 Hz, in a CSS3DRenderer layer
+that set is the REAL one: the same DOM tree, at 60 Hz, in a its own DOM layer layer
 that the WebGL room is composited over with a hole punched through the glass.
 The wheel in the top-left corner chooses which dashboard is plugged in, and it
 swaps the build in place without rebuilding the room around it. `ROOM.md` is
@@ -338,7 +342,7 @@ hand-written 9199 XML and the 9199 binary disagree, the binary wins
   the compositor budget at phone pixel ratios.
 - `tests/smoke/smoke-room.mjs` is the living room's gate: that a bare `/` is the
   room and that every route a judge opens is NOT, that the dashboard really is
-  mounted inside the television's CSS3D screen element, that the set starts cold
+  mounted inside the television's screen element, that the set starts cold
   and unbooted, every moment of the power-on sequence as a frame count under
   `&manual` (ring, relay, line, bloom, boot, camera), the startup animation on
   the wall clock (it is a `<video>`, so it is the one thing here that cannot be

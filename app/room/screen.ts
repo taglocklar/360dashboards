@@ -3,12 +3,12 @@
 // The dashboard is a DOM tree - that is not a limitation to work around, it is
 // the project: packages/runtime renders XUI scenes into elements with the
 // console's own measured transforms on them. So the picture on this set is the
-// REAL dashboard, live, at 60 Hz, in a CSS3DRenderer layer, and the WebGL room
+// REAL dashboard, live, at 60 Hz, in its own DOM layer, and the WebGL room
 // is composited on top of it with a hole cut where the glass is.
 //
 //   WebGL canvas    bezel, cabinet, room, glare        alpha-composited
 //         |                                            over
-//   CSS3D layer     .room-screen -> .xui-viewport -> the dashboard
+//   picture layer   .room-screen -> .xui-viewport -> the dashboard
 //
 // The hole is a mesh in the WebGL scene whose material writes rgba(0,0,0,0)
 // with blending DISABLED. NoBlending means the fragment REPLACES what is in
@@ -23,7 +23,6 @@
 // therefore a CSS or SVG filter on the DOM (see crt.ts), and only the
 // reflections and the glare - which live in FRONT of the glass - are WebGL.
 import * as T from 'three';
-import { CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { buildCrt, type Crt } from './crt';
@@ -49,8 +48,11 @@ export interface TvScreen {
   /** The console's own startup animation, which is the picture until the
    *  dashboard is. */
   startup: Startup;
-  /** The CSS3D node the renderer positions. */
-  css: CSS3DObject;
+  /** The picture's own element. */
+  /** The picture's element, and the rectangle it occupies in the room. The room
+   *  projects one onto the other every frame (app/room/project.ts). */
+  screenEl: HTMLElement;
+  rect: { centre: readonly [number, number, number]; half: readonly [number, number] };
   /** true once the picture is live and the glass is a hole. */
   readonly on: boolean;
   /** true once the authored television has replaced the stand-in box. */
@@ -189,9 +191,15 @@ export function buildScreen(base: string, manager: T.LoadingManager): TvScreen {
   const startup = buildStartup(host, base);
   host.insertBefore(startup.layer, crt.picture.nextSibling);
   crt.addToPicture(startup.layer);
-  const css = new CSS3DObject(host);
-  css.position.set(0, SCREEN.y, SCREEN.z + 0.001);
-  css.scale.setScalar(PX);
+  // The element is placed by app/room/project.ts, which projects the four
+  // corners of THIS rectangle with the room's own camera and writes one
+  // matrix3d. It used to be a CSS3DObject at the same position and scale; the
+  // rectangle below is that object's footprint, stated once so the projector
+  // and the WebGL glass cannot drift apart.
+  const rect = {
+    centre: [0, SCREEN.y, SCREEN.z + 0.001] as const,
+    half: [(SCREEN_PX.w * PX) / 2, (SCREEN_PX.h * PX) / 2] as const,
+  };
   host.style.visibility = 'hidden';
 
   let on = false;
@@ -200,7 +208,8 @@ export function buildScreen(base: string, manager: T.LoadingManager): TvScreen {
     host: crt.picture,
     crt,
     startup,
-    css,
+    screenEl: host,
+    rect,
     get on() { return on; },
     get modelLoaded() { return tvLoaded; },
     setOn(next: boolean) {

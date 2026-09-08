@@ -15,7 +15,7 @@ true.
 
 ```
   WebGL canvas    cabinet, bezel, room, glare        <- alpha-composited over
-  CSS3D layer     .room-screen > .crt-picture > .xui-viewport > the dashboard
+  picture layer   .room-screen > .crt-picture > .xui-viewport > the dashboard
 ```
 
 The television's glass is a mesh in the WebGL scene whose material is
@@ -34,6 +34,45 @@ Two consequences, and they are the whole shape of the code:
   over an already-transparent pixel composites onto whatever the browser shows
   there. That is how the reflection of the window and the lamp gets onto the
   screen (`glareTexture()` in `app/room/screen.ts`).
+
+### The picture is placed by a homography, not by CSS3DRenderer
+
+The dashboard used to be a `CSS3DObject` inside three's `CSS3DRenderer`, which
+places things by building a `transform-style: preserve-3d` camera element
+carrying `perspective(Npx) translateZ(Npx) matrix3d(camera...)` and letting the
+browser do the perspective divide.
+
+**That is painted wrongly on iOS**, where every browser is WebKit, Chrome
+included. Measured on an iPhone 15 at 393x659: the screen element's LAYOUT box is
+exactly right - `getBoundingClientRect` agrees with Chrome to the pixel - while
+the PAINTED result is **0.767 of the correct width and 0.588 of the correct
+height, anchored at its bottom-left**. The dashboard sat low in the tube with its
+bottom cut off. Moving the perspective off the transform function list and onto
+the parent as the CSS `perspective` property fixed the horizontal axis exactly
+and left the vertical exactly as wrong, so there was no small change to
+`CSS3DRenderer` that rescued it.
+
+`app/room/project.ts` replaces it. The picture is ONE flat rectangle, so its four
+corners are projected with the same camera the WebGL room uses, and those four
+points define a **homography** from the element's own 1280x720 box to the quad
+the glass occupies. A homography is expressible as a plain `matrix3d` on the
+element itself - the perspective divide lives in the matrix's fourth row - so
+there is no perspective ancestor, no `preserve-3d`, and no renderer. It is exact
+rather than an affine approximation: the trapezoid an off-axis camera makes is
+carried by the `w` terms. Pointer events still land, because the browser inverts
+the transform for hit-testing the same way.
+
+Two things about the element are load-bearing and are in `app/styles.css`:
+`.room-screen` is **absolutely positioned at the layer's origin** with
+**`transform-origin: 0 0`**. A `relative` box or a centred origin moves the
+picture off the hole.
+
+**How this is gated.** Nothing else in the suite could have caught it: every
+assertion about the hole is about the WebGL side, and the element's layout box
+is correct even when the picture is painted somewhere else entirely. So
+`smoke-room` asks the room for `screenFit()` - the quad the room projects the
+glass to, and the box the browser gives the element - and requires them to agree
+within 1.5 px. Verified to fail by perturbing one projected corner by 14 px.
 
 ## Routes
 
@@ -138,7 +177,7 @@ re-encoded to H.264 at the console's own 1280x720 (the source was AV1, which
 Safari and pre-M3 Macs will not decode). NOTICE and PLACEHOLDERS.md say whose it
 is and what was cut.
 
-It plays as a `<video>` in the CSS3D layer, like everything else on this glass,
+It plays as a `<video>` in the picture layer, like everything else on this glass,
 so the warm-up squashes, wobbles and over-brightens it exactly as it does the
 dashboard — for those six seconds it IS the picture, and `crt.ts`'s `beam` list
 is what makes one transform drive both.
@@ -212,7 +251,9 @@ Procedural, in code, to real furniture dimensions - `app/room/`:
 | `loading.ts` | the screen you look at while the room is still boxes |
 | `props/shell.ts` | floor, ceiling, four walls, baseboard |
 | `props/stand.ts` | the media console, and the Xbox 360 socket (below) |
-| `props/furnishings.ts` | couch, coffee table, controller and cable, the two games, rug, lamp, window and blinds, wall dressing |
+| `props/furnishings.ts` | couch, coffee table, controller, the two games, the woven rug, lamp, window and blinds, the posters and the framed print |
+| `props/kit.ts` | how to put fifty small things in a room for the price of one draw call |
+| `props/dressing.ts` | the wall shelves and the plushies on them, the table clutter, the stand's cubby |
 
 ## What is on the table
 
@@ -367,12 +408,84 @@ recipe is `scratchpad/gltf/lean.mjs`.
 Loading it needs `MeshoptDecoder`, which ships with three
 (`three/examples/jsm/libs/meshopt_decoder.module.js`).
 
+## Dressing the room
+
+The room started as a box with a television in it, and it read as one: beige
+walls, an empty coffee table, and a rug three shades off the floor that nobody
+could find the edge of. What it has now - two wall shelves of plushies, three
+game posters, a mug and a can and a bag of crisps, a filed row of games in the
+media console's empty cubby, and a rug with a border on it - is all in
+`props/dressing.ts`, and it costs **four draw calls in total**.
+
+That is the whole design, and it is in `props/kit.ts`. Built the obvious way, a
+plushie is a mesh per ear, per eye, per paw: about 120 meshes and 120 draws
+across four toys, for maybe 7,000 triangles. No GPU made this century would
+notice the triangles; the DRAWS are what actually blows a frame budget. So each
+little primitive gets its colour as a **vertex attribute**, its transform baked
+into its vertices, and the whole pile is merged into one geometry drawn with one
+material. Everything on the shelves is two meshes; everything on and under the
+table is two more.
+
+The cost of the trick is that everything in one kit shares a **surface** - one
+roughness, one metalness - which is why there is a soft kit and a hard kit
+rather than one big one. Felt and painted plastic do not reflect alike, and the
+difference between them is most of what makes a plushie read as a plushie. Group
+by material, not by object.
+
+Three things learned by getting them wrong, in case they come up again:
+
+- **A vertex colour is LINEAR.** It is multiplied into the material's colour
+  before any output transform runs, so it has to be written through
+  `Color.setHex()` rather than as raw bytes. Get it wrong and the clutter is
+  washed out next to everything else in the room, and it looks like a lighting
+  bug rather than a colour-space one.
+- **The table is the horizon for anything on the floor.** A sightline from the
+  couch grazes the tabletop at y 0.439, so a case dropped on the rug at z 0.06
+  clears the floor by 26 mm and is, from the only angle anyone ever looks from,
+  entirely behind the table. Work out where the table's silhouette actually
+  falls before placing anything low.
+- **A silhouette is not enough at 40 px.** The bag of crisps was a rounded red
+  box and read as a brick. What makes a bag a bag at that size is the horizontal
+  label band across it, not the shape.
+
+The plushies are proportional rather than measured: every part is a fraction of
+one overall height, so a big one and a little one are recognisably the same kind
+of toy. Nothing in this file is randomised - every position, angle and colour is
+a literal - because a room that reshuffles itself on reload is a room no
+screenshot gate can check.
+
 ## Budgets and gates
 
-`tests/smoke/smoke-room.mjs` holds the room to 240 draw calls and 40,000
-triangles, and asserts the hole, the cold set, every moment of the sequence,
-the wheel's swap and the singleton census. It is on the board in
-`tests/run-all.mjs`.
+`tests/smoke/smoke-room.mjs` holds the room to **240 draw calls and 300,000
+triangles**, and asserts the hole, the cold set, every moment of the sequence,
+the wheel's swap, the singleton census, that every served asset returns 200 and
+that the procedural dressing is actually in the scene graph. It is on the board
+in `tests/run-all.mjs`.
+
+**The asset check asserts the content type, not the status, and it has to.**
+Vite's dev server answers an unknown path with the SPA fallback: a `GET` for a
+file that is not there returns **200 text/html**, the contents of `index.html`.
+So the version of this check that only looked for "200" could not fail for any
+asset - deleting a poster and re-running it passed. What separates a served
+asset from the fallback is the content type. The same shape of mistake is worth
+watching for anywhere else in this repo that a fetch is used to prove a file
+exists.
+
+Where the numbers go: about 187,000 of those triangles are the authored Xbox 360
+and another 27,000 the controller, for one draw call each. The whole rest of the
+room - shell, furniture, shelves, plushies, clutter, posters - is under 20,000
+triangles and about 25 draws.
+
+**Read the triangle number as SEVEN times the geometry, not two.** The room's
+only shadow-casting light is a `PointLight`, and a point light's shadow map is a
+CUBE: every casting mesh is drawn six more times, once per face. That is why one
+1,800-triangle plushie put 13,000 triangles a frame on the counter the first
+time it went in, and it is the whole explanation for a budget that otherwise
+moves in steps nobody can account for. `Kit.build()` therefore defaults
+`castShadow` to FALSE and it is turned on deliberately, for the things whose
+shadow is doing work: a floating shelf board needs the dark line under it, a mug
+on a table needs to be standing on the table, a toy three metres away on a shelf
+does not.
 
 The room is a box with furniture in it, not a game. If those budgets ever need
 raising, something has been modelled that did not need to be.

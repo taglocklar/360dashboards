@@ -2,7 +2,7 @@
 //
 // Layer order in the page (see the `.room` block of app/styles.css):
 //
-//   .room  > .room-css3d   the CSS3DRenderer's layer, holding the dashboard
+//   .room  > .room-css3d   the picture's layer, holding the dashboard
 //          > canvas.room-gl  the WebGL room, ON TOP, with a hole in the glass
 //
 // The canvas takes no pointer events. Everything - a click on the console's
@@ -11,13 +11,14 @@
 // is what keeps the dashboard's real input path (InputRouter, Touch.ts) intact
 // inside a 3D scene it knows nothing about.
 import * as T from 'three';
-import { CSS3DRenderer } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
+import { makeScreenProjector } from './project';
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
-import { CAMERA, ROOM, SCREEN } from './constants';
+import { CAMERA, ROOM, SCREEN, SCREEN_PX } from './constants';
 import { buildShell } from './props/shell';
 import { buildScreen } from './screen';
 import { buildStand } from './props/stand';
 import { buildCouch, buildLamp, buildRug, buildTable, buildWallDressing, buildWindow, type Prop } from './props/furnishings';
+import { buildClutter, buildGamerShelf } from './props/dressing';
 import { WARMUP } from './crt';
 
 export interface RoomOptions {
@@ -91,7 +92,7 @@ export interface Room {
    */
   changeInput(swap: () => Promise<void>): Promise<boolean>;
   /** The element the wheel and anything else that is OURS is mounted into:
-   *  over the room, never inside the CSS3D layer. */
+   *  over the room, never inside the picture's layer. */
   overlay: HTMLElement;
   dispose(): void;
   /** What the smoke suite asserts on. */
@@ -146,6 +147,17 @@ export interface RoomApi {
    *  is the only honest way to test that a finger on the console turns it on,
    *  and it moves with the camera so it cannot be hard-coded. */
   powerPoint(): { x: number; y: number };
+  /** The picture's placement, both ways round: the quad the room PROJECTS the
+   *  glass rectangle to, and the box the browser actually gives the element.
+   *  They must agree, and a suite comparing them is the only gate that can
+   *  catch the picture sliding off the hole - which is exactly what iOS did
+   *  (app/room/project.ts has the measurements). */
+  screenFit(): { quad: number[]; box: [number, number, number, number] };
+  /** The scene graph itself, for the one class of check nothing else can make:
+   *  the room's dressing is all procedural, so a builder that threw halfway
+   *  through leaves a room that renders, reports and passes - and is empty.
+   *  A suite walks this and asks for the merged meshes by name. */
+  scene(): T.Object3D;
   /** The same, for the controller on the table - the OTHER thing a press of
    *  power can land on. */
   padPoint(): { x: number; y: number } | null;
@@ -179,14 +191,16 @@ export function buildRoom(host: HTMLElement, opts: RoomOptions = {}): Room {
   el.appendChild(gl.domElement);
 
   // Ours, not the room's and not the dashboard's: the wheel lives here, over
-  // both renderers, outside the CSS3D transform so it is a flat 2D corner of
+  // both layers, outside the picture's transform so it is a flat 2D corner of
   // the WINDOW rather than a poster on a wall.
   const overlay = document.createElement('div');
   overlay.className = 'room-overlay';
 
-  const css = new CSS3DRenderer();
-  css.domElement.className = 'room-css3d';
-  el.appendChild(css.domElement);
+  // The layer the picture lives in. A plain div now, not a CSS3DRenderer: the
+  // screen element inside it carries its own homography (app/room/project.ts).
+  const cssLayer = document.createElement('div');
+  cssLayer.className = 'room-css3d';
+  el.appendChild(cssLayer);
   // The CSS layer is BENEATH the canvas in paint order but FIRST in the
   // document, so the canvas has to be moved back on top after it - and the
   // overlay after that, because it is the only thing here a pointer is meant
@@ -216,7 +230,12 @@ export function buildRoom(host: HTMLElement, opts: RoomOptions = {}): Room {
 
   const tv = buildScreen(base, manager);
   scene.add(tv.group);
-  scene.add(tv.css);
+  cssLayer.appendChild(tv.screenEl);
+  const projector = makeScreenProjector(
+    tv.screenEl, camera, tv.rect,
+    () => ({ w: el.clientWidth || 1, h: el.clientHeight || 1 }),
+    { w: SCREEN_PX.w, h: SCREEN_PX.h },
+  );
   const stand = buildStand(base, manager);
   scene.add(stand.group);
 
@@ -230,6 +249,7 @@ export function buildRoom(host: HTMLElement, opts: RoomOptions = {}): Room {
   const props: Prop[] = [
     buildRug(), buildCouch(), table, buildWallDressing(base, manager),
     buildLamp(lights.lampPos), buildWindow(lights.windowPos),
+    buildGamerShelf(), buildClutter(),
   ];
   for (const p of props) scene.add(p.group);
 
@@ -281,7 +301,7 @@ export function buildRoom(host: HTMLElement, opts: RoomOptions = {}): Room {
   // events (`.room-gl { pointer-events: none }`), so this listens on the room
   // itself and raycasts - which also means a click that lands on the DASHBOARD
   // never gets here, because the picture's own element is above the room in
-  // the CSS3D layer and stops the event there.
+  // the picture's layer and stops the event there.
   const ray = new T.Raycaster();
   const ndc = new T.Vector2();
   const hitsConsole = (e: PointerEvent): boolean => {
@@ -353,7 +373,7 @@ export function buildRoom(host: HTMLElement, opts: RoomOptions = {}): Room {
     applyCamera();
     gl.setPixelRatio(Math.min(devicePixelRatio, 2));
     gl.setSize(w, h);
-    css.setSize(w, h);
+    projector.update();
   }
   const onResize = () => layout();
   addEventListener('resize', onResize);
@@ -402,7 +422,7 @@ export function buildRoom(host: HTMLElement, opts: RoomOptions = {}): Room {
     pushed = Math.min(1, Math.max(0, pushed + (dir * dt) / dur));
     applyCamera();
     gl.render(scene, camera);
-    css.render(scene, camera);
+    projector.update();
   }
 
   let raf = 0;
@@ -552,6 +572,19 @@ export function buildRoom(host: HTMLElement, opts: RoomOptions = {}): Room {
     setPower: (on) => room.setPower(on),
     snapPowered: () => room.snapPowered(),
     press: () => { if (!powered) room.setPower(true); },
+    scene: () => scene,
+    screenFit: () => {
+      const [cx, cy, cz] = tv.rect.centre;
+      const [hw, hh] = tv.rect.half;
+      const b = el.getBoundingClientRect();
+      const quad: number[] = [];
+      for (const [x, y] of [[cx - hw, cy + hh], [cx + hw, cy + hh], [cx + hw, cy - hh], [cx - hw, cy - hh]] as const) {
+        const v = new T.Vector3(x, y, cz).project(camera);
+        quad.push(((v.x + 1) / 2) * b.width, ((1 - v.y) / 2) * b.height);
+      }
+      const r = tv.screenEl.getBoundingClientRect();
+      return { quad, box: [r.left - b.left, r.top - b.top, r.width, r.height] };
+    },
     powerPoint: () => project(stand.ring)!,
     padPoint: () => (table.padTargets.length ? project(table.padTargets[0]!) : null),
   };
@@ -568,11 +601,19 @@ function addLights(scene: T.Scene): { glow: T.PointLight; lampPos: readonly [num
   RectAreaLightUniformsLib.init();
   // Sky/ground bounce, standing in for the global illumination we are not
   // paying for. Warm from the ceiling, cool from the floor.
-  scene.add(new T.HemisphereLight(0xd8c9ae, 0x2a2018, 0.40));
+  // 0.55, up from the 0.40 the empty room was lit at. Nothing in that room
+  // rewarded being looked at, so it could afford to sit in the dark and let the
+  // television be the only thing with any light on it. Now there are posters,
+  // shelves and a rug with a pattern in it, and at 0.40 all three were things
+  // you could tell were there rather than things you could see. The television
+  // is still far and away the brightest object in the frame the moment it comes
+  // on - it is a lit DOM layer, not a lit surface, so no amount of room light
+  // competes with it.
+  scene.add(new T.HemisphereLight(0xd8c9ae, 0x2a2018, 0.55));
 
   // The lamp, off to the left and behind the seat.
   const lampPos = [-1.62, 1.44, ROOM.back + 3.1] as const;
-  const lamp = new T.PointLight(0xffc98c, 9, 7, 2);
+  const lamp = new T.PointLight(0xffc98c, 11, 7.4, 2);
   lamp.position.set(...lampPos);
   lamp.castShadow = true;
   lamp.shadow.mapSize.set(1024, 1024);

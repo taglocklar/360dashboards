@@ -141,7 +141,7 @@ const host = document.getElementById('app')!;
  * Where a dashboard's `.xui-viewport` is appended.
  *
  * `#app` on every flat route, and the television's glass on `?room` - a
- * 1280x720 element inside a CSS3DObject (app/room/screen.ts). The three mount
+ * 1280x720 element projected onto the glass (app/room/screen.ts). The three mount
  * functions below append to THIS and never to `host`, which is the whole of
  * what putting the dashboard in a living room costs the dashboard: the shells,
  * the Viewport, the focus chains, the cues and the touch gestures are the same

@@ -29,7 +29,7 @@ export const SCREEN = {
   z: -1.24,
 } as const;
 
-/** The design canvas the dashboard is rendered at, before the CSS3D plane
+/** The design canvas the dashboard is rendered at, before the projection
  *  scales it down onto the glass. The console's own output size: never scale
  *  the dashboard by anything but this one uniform factor, or the measured
  *  canvas -> framebuffer transform in packages/runtime stops being measured. */
