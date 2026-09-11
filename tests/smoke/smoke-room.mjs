@@ -448,6 +448,56 @@ try {
   /* ------------------------------------------- 5. the wheel swaps in place */
   {
     const { page, pageErrors, consoleErrors } = await load('/?room&power=on&mute');
+  /* ------------------------ the picture is PAINTED where it is placed */
+  // screenFit() above proves the element's box sits on the hole. It cannot
+  // prove the PIXELS do: Chrome's GPU rasteriser painted a `matrix3d` whose
+  // perspective lived in its w-row with the blades sliced into horizontal
+  // bands, shifted and missing - and every box, every transform string and
+  // every layout query was correct while it did. The same page with GPU
+  // rasterisation off was pixel-clean. So that is the test: render the lit
+  // screen twice, on the GPU raster path everybody's Chrome uses and on the
+  // CPU path, and require them to agree. Geometry is identical by
+  // construction, so anything below 0.99 is a raster bug, not a tolerance.
+  {
+    const url = '/?room&power=on&mute';
+    const clipOf = async (page) => {
+      const fit = await page.evaluate(() => window.__roomApi.screenFit());
+      const [x, y, w, h] = fit.box;
+      return { x: Math.ceil(x) + 2, y: Math.ceil(y) + 2, width: Math.floor(w) - 4, height: Math.floor(h) - 4 };
+    };
+    // &power=on skips the startup animation, so "settled" is lit and not
+    // playing - not 'done', which only a played animation reaches.
+    const settle = (page) => page.waitForFunction(
+      () => window.__room().powered && window.__room().startup !== 'playing' && window.__room().console === 'model',
+      { timeout: 20000 }).then(() => new Promise((r) => setTimeout(r, 800)));
+    const { page: gpu } = await load(url, 1600, 900);
+    await settle(gpu);
+    const clip = await clipOf(gpu);
+    await gpu.screenshot({ path: `${OUT}/room-raster-gpu.png`, clip });
+    await gpu.close();
+
+    const cpuBrowser = await puppeteer.launch({
+      executablePath: CHROME,
+      headless: 'new',
+      args: ['--use-gl=angle', '--use-angle=metal', '--enable-unsafe-swiftshader', '--disable-gpu-rasterization'],
+    });
+    const cpu = await cpuBrowser.newPage();
+    await cpu.setViewport({ width: 1600, height: 900, deviceScaleFactor: 1 });
+    await cpu.goto(`${BASE}${url}`, { waitUntil: 'networkidle0' });
+    await cpu.waitForFunction(() => document.body.dataset.ready === 'true', { timeout: 20000 }).catch(() => {});
+    await settle(cpu);
+    const clip2 = await clipOf(cpu);
+    check(clip2.x === clip.x && clip2.width === clip.width, `raster: the two browsers placed the picture differently (${JSON.stringify(clip)} vs ${JSON.stringify(clip2)})`);
+    await cpu.screenshot({ path: `${OUT}/room-raster-cpu.png`, clip });
+    await cpuBrowser.close();
+
+    const a = readPng(`${OUT}/room-raster-gpu.png`);
+    const b = readPng(`${OUT}/room-raster-cpu.png`);
+    const c = compare(a, b, { x: 0, y: 0, w: clip.width, h: clip.height });
+    check(c.ncc >= 0.99,
+      `raster: GPU and CPU rasterisation disagree on the picture (ncc ${c.ncc.toFixed(4)}, mad ${c.mad.toFixed(2)}) - the transform on .room-screen is being painted wrongly; see app/room/project.ts`);
+  }
+
     const before = await page.evaluate(() => ({ w: window.__wheel(), build: window.__dash.build }));
     check(before.w.open === false, 'the wheel is open before anything opened it');
     // Three dashboards and one action. The action is not a dashboard and must

@@ -20,11 +20,15 @@
 // WHAT REPLACES IT. The picture is ONE flat rectangle whose corners we can
 // project ourselves, with the same camera the WebGL room uses. Four projected
 // corners define a HOMOGRAPHY from the element's own 1280x720 box to the quad
-// the glass occupies on screen, and a homography is expressible as a plain
-// `matrix3d` on the element itself - no perspective ancestor, no preserve-3d, no
+// the glass occupies on screen, and a homography is expressible as one
+// transform on the element itself - no perspective ancestor, no preserve-3d, no
 // renderer. It is exact (not an affine approximation: the trapezoid an off-axis
-// camera makes is carried by the w terms), it is one element and one transform,
-// and it is the same maths in every engine.
+// camera makes is carried by the perspective terms), it is one element and one
+// transform, and it is the same maths in every engine.
+//
+// HOW IT IS SPELLED ALSO MATTERS: `perspective(d)` followed by a matrix with a
+// z-row, never a `matrix3d` with the perspective in its w-row. Chrome's GPU
+// rasteriser breaks on the latter - see homography() below for the measurement.
 //
 // The element keeps hit-testing correctly, because the browser inverts the
 // transform for pointer events the same way it does for CSS3D.
@@ -94,15 +98,42 @@ export function makeScreenProjector(
 }
 
 /**
- * The CSS `matrix3d` that maps the box (0,0)-(w,h) onto the quad `q`.
+ * The CSS transform that maps the box (0,0)-(w,h) onto the quad `q`.
  *
  * Standard unit-square-to-quad: solve the 8 unknowns of a 3x3 homography with
  * h33 fixed at 1, then pre-scale by 1/w and 1/h so the source is the element's
- * own pixel box rather than the unit square. CSS takes the 4x4 column-major, and
- * the perspective terms live in the fourth ROW (m14, m24) - which is the whole
- * reason this works without a `perspective` ancestor: the divide is in the
- * element's own matrix.
+ * own pixel box rather than the unit square.
+ *
+ * HOW IT IS WRITTEN MATTERS. The obvious encoding is one `matrix3d` with the
+ * homography's perspective terms in the fourth ROW (m14, m24), and that is what
+ * this used to emit. Chrome's GPU rasteriser gets that wrong: with ANY non-zero
+ * w-row term - measured down to 1e-7, where the trapezoid it describes is a
+ * hundredth of a pixel - the dashboard's blades came out sliced into horizontal
+ * bands, shifted and missing, and the bands moved with the pointer parallax, so
+ * it read as flicker. The same page under `--disable-gpu-rasterization` or
+ * software compositing was pixel-clean, and nothing in the subtree (blend
+ * modes, filters, will-change, isolation, flattening) changed it.
+ *
+ * What Chrome does handle is a `perspective(d)` FUNCTION followed by a matrix
+ * with no w-row of its own. So the same homography is factored as
+ *
+ *     perspective(d) * M,   M = [ A  B  0  c ]
+ *                               [ D  E  0  f ]
+ *                               [-dG -dK 1  0 ]   (row-major, applied to (x,y,0,1))
+ *                               [ 0  0  0  1 ]
+ *
+ * with the perspective origin at the element's own transform origin (0,0):
+ * `perspective(d)` divides by (1 - z/d), and M puts the point at
+ * z = -d(Gx + Ky), so the divide is by exactly 1 + Gx + Ky - the homography's
+ * own w. `d` is arbitrary; it only scales the z the plane is tilted through
+ * (a few px at 1000 for the couch view), and every value from 1000 to 5000
+ * measured clean. It is not the camera's focal length and does not need to be.
+ *
+ * The decomposition is exact, not an approximation, and the element's layout
+ * box, hit-testing and screenFit() are unchanged by it.
  */
+const PERSPECTIVE_PX = 1000;
+
 function homography(q: number[], w: number, h: number): string | null {
   const [x0, y0, x1, y1, x2, y2, x3, y3] = q as [number, number, number, number, number, number, number, number];
   const dx1 = x1 - x2, dx2 = x3 - x2, sx = x0 - x1 + x2 - x3;
@@ -118,5 +149,7 @@ function homography(q: number[], w: number, h: number): string | null {
   const A = a / w, B = b / h, D = d / w, E = e / h, G = g / w, K = k / h;
   for (const n of [A, B, c, D, E, f, G, K]) if (!isFinite(n)) return null;
   const t = (n: number) => (Math.abs(n) < 1e-10 ? 0 : n);
-  return `matrix3d(${t(A)},${t(D)},0,${t(G)},${t(B)},${t(E)},0,${t(K)},0,0,1,0,${t(c)},${t(f)},0,1)`;
+  const P = PERSPECTIVE_PX;
+  // Column-major, as CSS lists it: each group of four is one column.
+  return `perspective(${P}px) matrix3d(${t(A)},${t(D)},${t(-P * G)},0,${t(B)},${t(E)},${t(-P * K)},0,0,0,1,0,${t(c)},${t(f)},0,1)`;
 }

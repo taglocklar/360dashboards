@@ -1555,3 +1555,26 @@ that only a small screen or a finger can find.
   alpha base is read 41-60 px past the shadow's own 32. A shadow displaced by
   the centring inset falls inside that window, poisons the base and drives
   every alpha negative: the gate does not merely fail, it fails by 30x.
+
+## The room: a homography's w-row breaks Chrome's GPU raster (2026-09-11)
+
+The dashboard sat on the glass by one `matrix3d` with the perspective divide in
+its fourth row. Tag saw the blades sliced into horizontal bands, shifted and
+missing, and moving with the parallax - "flickering dashboards" - locally and on
+prod, and every layout query said the picture was exactly on the hole.
+
+- **A `matrix3d` with a non-zero w-row is a different thing to Chrome's GPU
+  rasteriser than `perspective()` + a matrix, even when they compose to the
+  same numbers.** The former painted the subtree wrong at ANY magnitude
+  (1e-7 measured, a hundredth of a pixel of trapezoid); the latter is clean.
+  Factor `H` as `perspective(d) * M`, `M = [A B 0 c; D E 0 f; -dG -dK 1 0]`
+  applied to `(x, y, 0, 1)`: `perspective(d)` divides by `1 - z/d`, and `M`
+  puts `z = -d(Gx + Ky)`, so the divide is the homography's own `w`. `d` is free.
+- **Split the raster path from the geometry before touching the CSS.** The
+  fourteen subtree variants (blend modes, filters, will-change, isolation,
+  flattening) each moved NCC by a few hundredths and none fixed it; one run with
+  `--disable-gpu-rasterization` was clean and said where the bug lived. Two
+  runs of the same page on two raster paths is now the gate, because a layout
+  box cannot see a raster bug.
+- **Prove a new gate fails.** Swapping the old emitter back in reads 0.66
+  against the gate's 0.99; the fix reads 0.9998.

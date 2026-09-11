@@ -55,12 +55,28 @@ and left the vertical exactly as wrong, so there was no small change to
 `app/room/project.ts` replaces it. The picture is ONE flat rectangle, so its four
 corners are projected with the same camera the WebGL room uses, and those four
 points define a **homography** from the element's own 1280x720 box to the quad
-the glass occupies. A homography is expressible as a plain `matrix3d` on the
-element itself - the perspective divide lives in the matrix's fourth row - so
-there is no perspective ancestor, no `preserve-3d`, and no renderer. It is exact
-rather than an affine approximation: the trapezoid an off-axis camera makes is
-carried by the `w` terms. Pointer events still land, because the browser inverts
-the transform for hit-testing the same way.
+the glass occupies. A homography is expressible as one transform on the element
+itself - so there is no perspective ancestor, no `preserve-3d`, and no renderer.
+It is exact rather than an affine approximation: the trapezoid an off-axis
+camera makes is carried by the perspective terms. Pointer events still land,
+because the browser inverts the transform for hit-testing the same way.
+
+**How it is SPELLED matters, and this cost a round (2026-09-11).** The obvious
+encoding is a single `matrix3d` with the perspective in its fourth row (`m14`,
+`m24`), and that is what shipped. Chrome's GPU rasteriser paints that wrongly:
+the blades came out sliced into horizontal bands, shifted and missing, and the
+bands moved with the pointer parallax, so it read as flicker - locally and in
+prod, and on any non-zero w term (measured down to 1e-7, a hundredth of a pixel
+of trapezoid). Under `--disable-gpu-rasterization` or software compositing the
+same page was pixel-clean, and nothing in the subtree changed it: not blend
+modes, filters, `will-change`, `isolation`, or flattening. What Chrome does
+handle is the `perspective(d)` FUNCTION followed by a matrix with a z-row and no
+w-row of its own, so `project.ts` factors the same homography as
+`perspective(d) * M` with `M` putting the point at `z = -d(Gx + Ky)`: the
+divide is then by exactly `1 + Gx + Ky`, the homography's own `w`. `d` is
+arbitrary (1000 px; it only sets how many px of z the plane tilts through) and
+it is not the camera's focal length. Verified clean on Chrome's GPU path and in
+the iOS Simulator.
 
 Two things about the element are load-bearing and are in `app/styles.css`:
 `.room-screen` is **absolutely positioned at the layer's origin** with
@@ -73,6 +89,14 @@ is correct even when the picture is painted somewhere else entirely. So
 `smoke-room` asks the room for `screenFit()` - the quad the room projects the
 glass to, and the box the browser gives the element - and requires them to agree
 within 1.5 px. Verified to fail by perturbing one projected corner by 14 px.
+
+That gate could not see the Chrome raster bug either - the box was right while
+the pixels were wrong - so `smoke-room` also renders the lit screen twice, on
+the GPU raster path everybody's Chrome uses and with
+`--disable-gpu-rasterization`, and requires the two to agree (NCC >= 0.99).
+Geometry is identical by construction, so disagreement is a raster bug and not
+a tolerance. It reads 0.9998 on the `perspective()` form and 0.66 on the w-row
+`matrix3d`.
 
 ## Routes
 
